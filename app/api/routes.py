@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from app import __version__
 from app.db.session import get_db
-from app.schemas import HealthResponse
+from app.llm.client import LLMClient, get_llm_client
+from app.schemas import HealthResponse, TicketAnalysisResponse, TicketAnalyzeRequest
+from app.services.analyzer import TicketAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -29,3 +31,18 @@ def health(response: Response, db: Session = Depends(get_db)) -> HealthResponse:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return HealthResponse(status="degraded", database=database, version=__version__)
     return HealthResponse(status="ok", database=database, version=__version__)
+
+
+def get_analyzer(llm: LLMClient = Depends(get_llm_client)) -> TicketAnalyzer:
+    return TicketAnalyzer(llm)
+
+
+@api_router.post("/tickets/analyze", response_model=TicketAnalysisResponse, tags=["tickets"])
+def analyze_ticket(
+    request: TicketAnalyzeRequest, analyzer: TicketAnalyzer = Depends(get_analyzer)
+) -> TicketAnalysisResponse:
+    """Classify a ticket, extract its entities and list what to ask the customer.
+
+    LLM errors are turned into 502/503 responses by the handlers registered in app.main.
+    """
+    return analyzer.analyze(request)

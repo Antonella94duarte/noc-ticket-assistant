@@ -1,7 +1,11 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Values accepted by the OpenAI SDK; each model supports a subset (see its page in the docs).
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
 
 class Settings(BaseSettings):
@@ -15,9 +19,12 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://noc:noc@localhost:5432/noc_tickets"
 
-    # LLM settings are optional until phase 1, when the analyzer starts using them.
+    # Optional so the API starts without them; /tickets/analyze answers 503 until they are set.
     openai_api_key: SecretStr | None = None
     openai_model: str | None = None
+    # Reasoning tokens are billed as output. With "low", gpt-6-luna skipped reasoning and misjudged
+    # severity on the sample tickets; "medium" got them right for ~50% more cost.
+    openai_reasoning_effort: ReasoningEffort = "medium"
 
 
 @lru_cache

@@ -1,5 +1,3 @@
-import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
 from app.db.session import get_db
@@ -13,13 +11,6 @@ class FakeSession:
     def execute(self, *args, **kwargs):
         if self.fail:
             raise OperationalError("SELECT 1", {}, Exception("connection refused"))
-
-
-@pytest.fixture
-def client():
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
 
 
 def test_health_ok(client):

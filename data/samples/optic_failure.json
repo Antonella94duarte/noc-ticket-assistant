@@ -1,0 +1,4 @@
+{
+  "ticket_text": "Alarma en rtr-norte-02: la potencia de recepción del transceptor de Hu0/0/0/3 cayó por debajo del umbral. El tráfico sigue pasando por rtr-norte-01.",
+  "logs": "rtr-norte-02 %PKT_INFRA-FM-3-FAULT_MAJOR: ALARM_MAJOR :RX LOS LANE-0 ALARM : Hu0/0/0/3\nrtr-norte-02 optics Hu0/0/0/3 Rx power: -28.4 dBm (low alarm threshold: -14.0 dBm)"
+}

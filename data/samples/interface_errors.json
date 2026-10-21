@@ -1,0 +1,4 @@
+{
+  "ticket_text": "Cliente de SITE-ESTE-04 reporta cortes intermitentes y videollamadas que se congelan desde las 09:15 de hoy.",
+  "logs": "sw-este-04 Gi1/0/12 is up, line protocol is up\n  5 minute input rate 412000 bits/sec\n  1873 input errors, 1650 CRC, 0 frame, 223 overrun\n  Last clearing of counters 02:10:44"
+}
