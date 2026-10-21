@@ -1,3 +1,5 @@
+import uuid
+from datetime import datetime
 from enum import Enum
 from typing import Literal
 
@@ -73,9 +75,35 @@ class TokenUsage(BaseModel):
     total_tokens: int
 
 
-class TicketAnalysisResponse(BaseModel):
+class TicketDetail(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    ticket_text: str
+    logs: str | None
     classification: TicketClassification
     model: str
     reasoning_effort: str | None
     prompt_version: str
     usage: TokenUsage
+
+
+class TicketAnalyzeResponse(TicketDetail):
+    cached: bool = Field(
+        description="True when an identical ticket was already analyzed with this prompt version "
+        "and the stored analysis was returned without calling the model."
+    )
+
+
+class TicketSummary(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    category: IncidentCategory
+    severity: Severity
+    ticket_excerpt: str
+
+
+class TicketPage(BaseModel):
+    items: list[TicketSummary]
+    total: int
+    limit: int
+    offset: int

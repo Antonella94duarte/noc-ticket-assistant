@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
-    database_url: str = "postgresql+psycopg://noc:noc@localhost:5432/noc_tickets"
+    database_url: str = "postgresql+psycopg://noc:noc@localhost:5433/noc_tickets"
 
     # Optional so the API starts without them; /tickets/analyze answers 503 until they are set.
     openai_api_key: SecretStr | None = None

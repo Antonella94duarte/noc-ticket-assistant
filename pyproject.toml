@@ -17,3 +17,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint.isort]
+# The alembic/ migrations folder would otherwise make ruff treat the package as first-party.
+known-third-party = ["alembic"]

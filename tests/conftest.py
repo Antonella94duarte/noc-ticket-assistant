@@ -1,9 +1,22 @@
-import pytest
-from fastapi.testclient import TestClient
+import os
 
+import pytest
+from alembic import command
+from alembic.config import Config
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, make_url, text
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
 from app.llm.client import LLMError, LLMResult
 from app.main import app
 from app.schemas import TicketClassification
+
+# A separate database, so tests never touch the development data.
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql+psycopg://noc:noc@localhost:5433/noc_tickets_test"
+)
 
 SAMPLE_CLASSIFICATION = {
     "category": "connectivity_loss",
@@ -52,3 +65,53 @@ def client():
 @pytest.fixture
 def sample_classification() -> TicketClassification:
     return TicketClassification.model_validate(SAMPLE_CLASSIFICATION)
+
+
+def _create_database_if_missing(url: str) -> None:
+    target = make_url(url)
+    admin = create_engine(target.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        exists = conn.scalar(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": target.database}
+        )
+        if not exists:
+            conn.execute(text(f'CREATE DATABASE "{target.database}"'))
+    admin.dispose()
+
+
+@pytest.fixture(scope="session")
+def db_engine():
+    """Test database migrated with Alembic, so the migrations themselves are exercised."""
+    try:
+        _create_database_if_missing(TEST_DATABASE_URL)
+    except OperationalError as exc:
+        pytest.skip(f"PostgreSQL not reachable at {TEST_DATABASE_URL}: {exc.__class__.__name__}")
+
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+    command.upgrade(config, "head")
+
+    engine = create_engine(TEST_DATABASE_URL)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def db_session(db_engine):
+    """Session inside a transaction that is rolled back after the test.
+
+    Commits made by the code under test only release a savepoint, so nothing persists.
+    """
+    connection = db_engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection, join_transaction_mode="create_savepoint")
+    yield session
+    session.close()
+    transaction.rollback()
+    connection.close()
+
+
+@pytest.fixture
+def db_client(client, db_session):
+    app.dependency_overrides[get_db] = lambda: db_session
+    return client
