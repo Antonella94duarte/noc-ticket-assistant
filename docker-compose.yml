@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-noc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-noc}
+      POSTGRES_DB: ${POSTGRES_DB:-noc_tickets}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      # Inside the compose network the database host is the service name, not localhost.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-noc}:${POSTGRES_PASSWORD:-noc}@db:5432/${POSTGRES_DB:-noc_tickets}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
