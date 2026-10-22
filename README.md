@@ -1,12 +1,14 @@
 # NOC Ticket Assistant
 
+[![CI](https://github.com/Antonella94duarte/noc-ticket-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Antonella94duarte/noc-ticket-assistant/actions/workflows/ci.yml)
+
 An API that helps Network Operations Center (NOC) operators triage incident tickets with an LLM.
 Given a ticket and optional device logs or alarms, it returns structured JSON with the incident
 category, severity, extracted technical entities, missing information to ask the customer,
 a step-by-step diagnosis and a draft reply.
 
-> Work in progress. The analysis pipeline and persistence (phases 1-3) are in place; CI and the
-> final documentation come next.
+> Work in progress. The analysis pipeline, persistence, tests and CI (phases 1-4) are in place;
+> the final documentation and demo come next.
 
 All tickets and logs in this repository are synthetic.
 
@@ -163,9 +165,52 @@ pytest
 ruff check .
 ```
 
+Tests never call OpenAI: the LLM client is a FastAPI dependency that the tests replace with a fake,
+so they are free, fast and deterministic.
+
 Database tests run against a real PostgreSQL in a separate `noc_tickets_test` database (created and
-migrated automatically, each test rolled back). Point `TEST_DATABASE_URL` elsewhere if needed; if
-PostgreSQL isn't reachable those tests are skipped.
+migrated with Alembic, each test rolled back). Point `TEST_DATABASE_URL` elsewhere if needed. If
+PostgreSQL isn't reachable those tests are skipped locally, but they fail in CI so a broken setup
+can't produce a green build.
+
+## Continuous integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request:
+
+- **lint**: `ruff check` and `ruff format --check`.
+- **test**: `pytest` against a PostgreSQL 16 service container, so the migrations and every
+  database test run in CI.
+
+## Evaluating prompts
+
+`data/eval/classification.jsonl` holds 12 labeled synthetic tickets, separate from the few-shot
+examples and the samples. When a case has more than one defensible answer under the rubric, its
+label lists all of them, so label ambiguity isn't counted as a model error.
+
+`scripts/evaluate.py` runs the classification step over them with the real model and reports
+accuracy and tokens. It spends tokens, so it runs by hand, not in CI:
+
+```bash
+python scripts/evaluate.py                                   # current prompt and settings
+python scripts/evaluate.py --prompt-version classify_v1 --effort low
+```
+
+Results with `gpt-6-luna` (one run each):
+
+| Prompt | Effort | Category | Severity | Output tokens |
+|---|---|---|---|---|
+| classify_v2 | medium | 12/12 | 12/12 | 4,171 |
+| classify_v1 | medium | 12/12 | 12/12 | 3,597 |
+| classify_v2 | low | 11/12 | 11/12 | 1,240 |
+
+What this shows:
+- At `medium` effort both prompts get every case right, so this set no longer separates them. It
+  works as a regression guard; telling prompt versions apart needs harder cases.
+- At `low` effort, `classify_v2` labeled "Tenemos problemas con el servicio" as a major
+  connectivity loss: the new rule for vague total outages ("no anda nada") was applied to a ticket
+  that never says the service is down. A prompt fix can introduce its own error, which is why the
+  set exists.
+- A single run per configuration doesn't capture the model's run-to-run variation.
 
 ## Roadmap
 
@@ -173,5 +218,5 @@ PostgreSQL isn't reachable those tests are skipped.
 - [x] Phase 1: classification and entity extraction (few-shot, structured output)
 - [x] Phase 2: persistence, migrations, `content_hash` cache, filtered listing
 - [x] Phase 3: chained diagnosis call and customer reply draft
-- [ ] Phase 4: tests with a mocked LLM, CI on GitHub Actions
+- [x] Phase 4: tests with a mocked LLM, CI on GitHub Actions, prompt evaluation set
 - [ ] Phase 5: documentation, diagram, demo

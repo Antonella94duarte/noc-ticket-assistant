@@ -101,7 +101,12 @@ def sample_classification() -> TicketClassification:
 
 def _create_database_if_missing(url: str) -> None:
     target = make_url(url)
-    admin = create_engine(target.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        target.set(database="postgres"),
+        isolation_level="AUTOCOMMIT",
+        # Fail fast when nothing listens: without it a dropped connection can hang for minutes.
+        connect_args={"connect_timeout": 5},
+    )
     with admin.connect() as conn:
         exists = conn.scalar(
             text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": target.database}
@@ -112,12 +117,24 @@ def _create_database_if_missing(url: str) -> None:
 
 
 @pytest.fixture(scope="session")
-def db_engine():
-    """Test database migrated with Alembic, so the migrations themselves are exercised."""
+def _database_unreachable() -> str | None:
+    """Try to reach PostgreSQL once per run, not once per test that needs it."""
     try:
         _create_database_if_missing(TEST_DATABASE_URL)
     except OperationalError as exc:
-        pytest.skip(f"PostgreSQL not reachable at {TEST_DATABASE_URL}: {exc.__class__.__name__}")
+        return f"PostgreSQL not reachable at {TEST_DATABASE_URL}: {exc.__class__.__name__}"
+    return None
+
+
+@pytest.fixture(scope="session")
+def db_engine(_database_unreachable):
+    """Test database migrated with Alembic, so the migrations themselves are exercised."""
+    if _database_unreachable:
+        # Locally, skipping lets the rest of the suite run without Docker. In CI (GitHub Actions
+        # sets CI=true) a skip would hide a broken setup behind a green build, so fail instead.
+        if os.environ.get("CI"):
+            pytest.fail(_database_unreachable)
+        pytest.skip(_database_unreachable)
 
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
