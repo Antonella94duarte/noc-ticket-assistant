@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.db import repository
 from app.db.models import Ticket
-from app.schemas import TicketAnalyzeRequest, TicketClassification, TicketDetail, TokenUsage
+from app.schemas import (
+    TicketAnalyzeRequest,
+    TicketClassification,
+    TicketDetail,
+    TicketDiagnosis,
+    TokenUsage,
+)
 from app.services.analyzer import TicketAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -47,13 +53,16 @@ def analyze_ticket(
         content_hash=digest,
         category=classification.category.value,
         severity=classification.severity.value,
-        analysis={"classification": classification.model_dump(mode="json")},
+        analysis={
+            "classification": classification.model_dump(mode="json"),
+            "diagnosis": analysis.diagnosis.model_dump(mode="json"),
+        },
         prompt_version=analysis.prompt_version,
-        model=analysis.llm.model,
-        reasoning_effort=analysis.llm.reasoning_effort,
-        input_tokens=analysis.llm.input_tokens,
-        output_tokens=analysis.llm.output_tokens,
-        reasoning_tokens=analysis.llm.reasoning_tokens,
+        model=analysis.model,
+        reasoning_effort=analysis.reasoning_effort,
+        input_tokens=analysis.input_tokens,
+        output_tokens=analysis.output_tokens,
+        reasoning_tokens=analysis.reasoning_tokens,
     )
     db.add(ticket)
     try:
@@ -70,12 +79,15 @@ def analyze_ticket(
 
 
 def to_detail(ticket: Ticket) -> TicketDetail:
+    # Tickets analyzed before the diagnosis step have only the classification.
+    diagnosis = ticket.analysis.get("diagnosis")
     return TicketDetail(
         id=ticket.id,
         created_at=ticket.created_at,
         ticket_text=ticket.ticket_text,
         logs=ticket.logs,
         classification=TicketClassification.model_validate(ticket.analysis["classification"]),
+        diagnosis=TicketDiagnosis.model_validate(diagnosis) if diagnosis else None,
         model=ticket.model,
         reasoning_effort=ticket.reasoning_effort,
         prompt_version=ticket.prompt_version,

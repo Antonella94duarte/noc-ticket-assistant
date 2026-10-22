@@ -36,7 +36,7 @@ class Ticket(Base):
 
     category: Mapped[str] = mapped_column(String(32))
     severity: Mapped[str] = mapped_column(String(16))
-    # Full LLM output (TicketClassification today, plus the diagnosis from phase 3).
+    # Full LLM output: {"classification": ..., "diagnosis": ...}.
     analysis: Mapped[dict] = mapped_column(JSONB)
 
     # What produced the analysis and what it cost.

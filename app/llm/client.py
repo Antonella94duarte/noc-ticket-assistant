@@ -58,7 +58,7 @@ class OpenAIClient:
         api_key: str,
         model: str,
         reasoning_effort: ReasoningEffort = "medium",
-        timeout: float = 30.0,
+        timeout: float = 60.0,
         max_retries: int = 2,
     ):
         self._client = openai.OpenAI(api_key=api_key, timeout=timeout, max_retries=max_retries)
@@ -112,9 +112,11 @@ def _find_refusal(response) -> str | None:
 
 @lru_cache
 def _build_openai_client(
-    api_key: str, model: str, reasoning_effort: ReasoningEffort
+    api_key: str, model: str, reasoning_effort: ReasoningEffort, timeout: float
 ) -> OpenAIClient:
-    return OpenAIClient(api_key=api_key, model=model, reasoning_effort=reasoning_effort)
+    return OpenAIClient(
+        api_key=api_key, model=model, reasoning_effort=reasoning_effort, timeout=timeout
+    )
 
 
 def get_llm_client() -> LLMClient:
@@ -124,4 +126,9 @@ def get_llm_client() -> LLMClient:
     api_key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else ""
     if not api_key or not settings.openai_model:
         raise LLMNotConfiguredError("Set OPENAI_API_KEY and OPENAI_MODEL to enable analysis")
-    return _build_openai_client(api_key, settings.openai_model, settings.openai_reasoning_effort)
+    return _build_openai_client(
+        api_key,
+        settings.openai_model,
+        settings.openai_reasoning_effort,
+        settings.openai_timeout_seconds,
+    )

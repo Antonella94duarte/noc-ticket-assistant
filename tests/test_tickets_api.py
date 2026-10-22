@@ -54,6 +54,13 @@ def test_get_ticket_returns_stored_analysis(db_client, tickets):
     assert body["usage"]["total_tokens"] == 120
 
 
+def test_ticket_analyzed_before_the_diagnosis_step_has_null_diagnosis(db_client, tickets):
+    # add_ticket stores only a classification, like rows written by classify_v1.
+    body = db_client.get(f"/api/v1/tickets/{tickets[0].id}").json()
+
+    assert body["diagnosis"] is None
+
+
 def test_get_unknown_ticket_returns_404(db_client):
     assert db_client.get(f"/api/v1/tickets/{uuid.uuid4()}").status_code == 404
 

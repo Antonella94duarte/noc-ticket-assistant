@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.llm.client import LLMError, LLMResult
 from app.main import app
-from app.schemas import TicketClassification
+from app.schemas import TicketClassification, TicketDiagnosis
 
 # A separate database, so tests never touch the development data.
 TEST_DATABASE_URL = os.environ.get(
@@ -32,21 +32,53 @@ SAMPLE_CLASSIFICATION = {
     "missing_information": [],
 }
 
+SAMPLE_DIAGNOSIS = {
+    "reasoning": [
+        "TenGigE0/0/0/1 went down at 03:10 and BFD to 10.20.0.2 dropped right after.",
+        "Link and BFD failing together point to the physical path, not routing.",
+    ],
+    "probable_causes": [
+        {"cause": "Fiber cut", "likelihood": "high", "evidence": "Link down with no flapping."},
+    ],
+    "diagnostic_steps": [
+        {
+            "action": "Check optical power on the interface",
+            "command": "show controllers TenGigE0/0/0/1 phy",
+            "expected_result": "No RX light confirms a fiber or optic problem.",
+        }
+    ],
+    "recommended_actions": ["Dispatch field team to the fiber route"],
+    "customer_reply": "Estamos trabajando en la falla que afecta su servicio.",
+}
+
 
 class FakeLLM:
-    """Stands in for the real client: returns a canned answer and records what it was sent."""
+    """Stands in for the real client: returns a canned answer per output schema and records the
+    messages it was sent. `fail_on` makes it raise `error` only for that schema."""
 
-    def __init__(self, output: dict | None = None, error: LLMError | None = None):
-        self.output = output if output is not None else SAMPLE_CLASSIFICATION
+    def __init__(
+        self,
+        outputs: dict[type, dict] | None = None,
+        error: LLMError | None = None,
+        fail_on: type | None = None,
+    ):
+        self.outputs = {
+            TicketClassification: SAMPLE_CLASSIFICATION,
+            TicketDiagnosis: SAMPLE_DIAGNOSIS,
+            **(outputs or {}),
+        }
         self.error = error
+        self.fail_on = fail_on
         self.calls: list[list[dict]] = []
+        self.output_models: list[type] = []
 
     def parse(self, messages, output_model):
         self.calls.append(messages)
-        if self.error:
+        self.output_models.append(output_model)
+        if self.error and self.fail_on in (None, output_model):
             raise self.error
         return LLMResult(
-            parsed=output_model.model_validate(self.output),
+            parsed=output_model.model_validate(self.outputs[output_model]),
             model="fake-model",
             input_tokens=1200,
             output_tokens=150,

@@ -61,7 +61,7 @@ def analyze_ticket(
     db: Session = Depends(get_db),
     analyzer: TicketAnalyzer = Depends(get_analyzer),
 ) -> TicketAnalyzeResponse:
-    """Classify a ticket, extract its entities and list what to ask the customer.
+    """Classify and diagnose a ticket, and draft the reply to the customer.
 
     An identical ticket (same text and logs, same prompt version) returns the stored analysis
     with 200 instead of calling the model again. LLM errors are turned into 502/503 responses

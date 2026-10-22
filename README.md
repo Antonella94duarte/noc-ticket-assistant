@@ -5,8 +5,8 @@ Given a ticket and optional device logs or alarms, it returns structured JSON wi
 category, severity, extracted technical entities, missing information to ask the customer,
 a step-by-step diagnosis and a draft reply.
 
-> Work in progress. Classification, entity extraction and persistence (phases 1-2) are in place;
-> the diagnosis and the customer reply draft come next.
+> Work in progress. The analysis pipeline and persistence (phases 1-3) are in place; CI and the
+> final documentation come next.
 
 All tickets and logs in this repository are synthetic.
 
@@ -52,12 +52,26 @@ curl -X POST http://localhost:8000/api/v1/tickets/analyze   -H "Content-Type: ap
       "ip_addresses": [],
       "event_time": "09:15"
     },
-    "missing_information": ["..."]
+    "missing_information": ["¿Cuál es el circuito o servicio afectado?", "..."]
+  },
+  "diagnosis": {
+    "reasoning": [
+      "El contador muestra 1873 errores de entrada, incluidos 1650 CRC...",
+      "..."
+    ],
+    "probable_causes": [
+      {"cause": "Problema físico en el enlace de Gi1/0/12...", "likelihood": "medium", "evidence": "..."}
+    ],
+    "diagnostic_steps": [
+      {"action": "...", "command": "show interfaces Gi1/0/12", "expected_result": "..."}
+    ],
+    "recommended_actions": ["..."],
+    "customer_reply": "Lamentamos los inconvenientes que están teniendo con las videollamadas..."
   },
   "model": "gpt-6-luna",
   "reasoning_effort": "medium",
-  "prompt_version": "classify_v1",
-  "usage": {"input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0, "total_tokens": 0}
+  "prompt_version": "classify_v2+diagnose_v1",
+  "usage": {"input_tokens": 3785, "output_tokens": 1804, "reasoning_tokens": 273, "total_tokens": 5589}
 }
 ```
 
@@ -66,7 +80,7 @@ curl -X POST http://localhost:8000/api/v1/tickets/analyze   -H "Content-Type: ap
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/v1/tickets/analyze` | Analyze a ticket (text + optional logs). `201` when new, `200` with `"cached": true` when an identical ticket was already analyzed |
-| `GET` | `/api/v1/tickets/{id}` | A ticket with its stored analysis |
+| `GET` | `/api/v1/tickets/{id}` | A ticket with its stored classification and diagnosis |
 | `GET` | `/api/v1/tickets` | Newest first, filters `category` and `severity`, pagination `limit` (max 100) and `offset` |
 | `GET` | `/health` | API and database status (`503` when the database is down) |
 
@@ -87,20 +101,43 @@ One `tickets` table keeps the ticket, its analysis and how it was produced:
 
 Migrations are managed with Alembic and run automatically when the API container starts.
 
-## How the prompt is built
+## How the analysis works
+
+Each ticket goes through two chained model calls (`app/services/analyzer.py`):
+
+1. **Classify** (`classify_v2`): category, severity, entities and the questions still open for the
+   customer. Few-shot, short output.
+2. **Diagnose** (`diagnose_v1`): receives the ticket plus the classification as JSON and returns
+   step-by-step reasoning, probable causes with their evidence, diagnostic steps with CLI commands,
+   immediate actions and a draft reply to the customer.
+
+Splitting the work keeps each prompt focused, lets each step be versioned and tested on its own,
+and gives the diagnosis a structured starting point. If either call fails nothing is stored, so a
+half analysis is never served from the cache.
+
+With `gpt-6-luna` at `medium` effort, an analysis takes about 13-18 s and ~5,500 tokens
+(about US$0.0013) on the sample tickets.
+
+## How the prompts are built
 
 Prompts live in `app/llm/prompts/<version>/`, separate from the code, and every response reports
-the `prompt_version` that produced it.
+the `prompt_version` that produced it. Older versions are kept so stored analyses stay traceable.
 
 - **Role, tone and context**: the system prompt sets a senior NOC engineer role and describes a
   small fictional network, used to judge impact.
 - **Delimiters**: the ticket and logs go inside `<ticket>` and `<logs>` tags and are declared as
   data. Tags written inside the ticket are neutralized so it can't break out of its block
-  (prompt-injection defense).
-- **Few-shot**: four worked examples, sent as user/assistant turns. One of them contains an
-  injection attempt that the expected answer ignores.
-- **Conditional output**: when data is missing, the model lists questions for the customer
-  instead of guessing values.
+  (prompt-injection defense). The classification passed to the second call gets the same
+  treatment, since it was generated from customer text.
+- **Few-shot**: five worked classification examples, sent as user/assistant turns. One contains an
+  injection attempt that the expected answer ignores; another teaches that lost redundancy is
+  `major` even before customers notice.
+- **Conditional output**: when data is missing, the classification lists questions instead of
+  guessing values, and the diagnosis marks itself as provisional and puts those questions in the
+  customer reply.
+- **Chain of thought**: `reasoning` is the first field of the diagnosis schema. The model writes
+  JSON in schema order, so it lays out the evidence before reaching conclusions, and the operator
+  can audit how it got there.
 - **Structured output**: the OpenAI Responses API with Structured Outputs enforces the Pydantic
   schema, and the reply is validated again on our side. Refusals and truncated replies become a
   502 instead of bad data.
@@ -135,6 +172,6 @@ PostgreSQL isn't reachable those tests are skipped.
 - [x] Phase 0: skeleton, Docker Compose, configuration, `/health`
 - [x] Phase 1: classification and entity extraction (few-shot, structured output)
 - [x] Phase 2: persistence, migrations, `content_hash` cache, filtered listing
-- [ ] Phase 3: chained diagnosis call and customer reply draft
+- [x] Phase 3: chained diagnosis call and customer reply draft
 - [ ] Phase 4: tests with a mocked LLM, CI on GitHub Actions
 - [ ] Phase 5: documentation, diagram, demo

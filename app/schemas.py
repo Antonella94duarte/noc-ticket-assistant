@@ -65,6 +65,44 @@ class TicketClassification(BaseModel):
     )
 
 
+class Likelihood(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class ProbableCause(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cause: str
+    likelihood: Likelihood
+    evidence: str = Field(description="What in the ticket or logs supports it, or what is assumed.")
+
+
+class DiagnosticStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: str = Field(description="What the engineer should check or do.")
+    command: str | None = Field(description="CLI command to run, or null if not applicable.")
+    expected_result: str = Field(description="What result confirms or rules out a cause.")
+
+
+class TicketDiagnosis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Field order matters: the model writes the JSON in schema order, so the reasoning is produced
+    # before the conclusions that depend on it.
+    reasoning: list[str] = Field(
+        description="Step-by-step reasoning from the evidence to the probable causes."
+    )
+    probable_causes: list[ProbableCause] = Field(description="Most likely first.")
+    diagnostic_steps: list[DiagnosticStep] = Field(description="In the order to run them.")
+    recommended_actions: list[str] = Field(
+        description="Immediate actions: mitigation, escalation, field dispatch."
+    )
+    customer_reply: str = Field(description="Draft reply to the customer.")
+
+
 # --- Ticket analysis: API response ---
 
 
@@ -81,6 +119,9 @@ class TicketDetail(BaseModel):
     ticket_text: str
     logs: str | None
     classification: TicketClassification
+    diagnosis: TicketDiagnosis | None = Field(
+        description="Null for tickets analyzed before the diagnosis step existed."
+    )
     model: str
     reasoning_effort: str | None
     prompt_version: str

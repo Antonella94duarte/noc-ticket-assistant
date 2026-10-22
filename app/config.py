@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # Reasoning tokens are billed as output. With "low", gpt-6-luna skipped reasoning and misjudged
     # severity on the sample tickets; "medium" got them right for ~50% more cost.
     openai_reasoning_effort: ReasoningEffort = "medium"
+    # Per request; the SDK retries twice, and each analysis makes two chained calls.
+    openai_timeout_seconds: float = 60.0
 
 
 @lru_cache
