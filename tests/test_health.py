@@ -34,3 +34,11 @@ def test_health_reports_database_down(client):
         "database": "unavailable",
         "version": "0.1.0",
     }
+
+
+def test_demo_page_is_served(client):
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "NOC Ticket Assistant" in response.text

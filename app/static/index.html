@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOC Ticket Assistant</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --border: #dde1e8;
+    --accent: #2459d6; --accent-text: #ffffff; --code-bg: #f0f2f6;
+    --critical: #b42318; --major: #c4570c; --minor: #a37b00; --warning: #2f6f9f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b1f27; --text: #e6e9ef; --muted: #9aa3b2; --border: #2c323d;
+      --accent: #6d95ff; --accent-text: #0d1220; --code-bg: #232833;
+      --critical: #ff6b5e; --major: #ff9b52; --minor: #e7c34a; --warning: #6fb4e6;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 20px 24px 8px; max-width: 1200px; margin: 0 auto; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  main { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 20px;
+         max-width: 1200px; margin: 0 auto; padding: 16px 24px 40px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px 32px; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+           padding: 16px; min-width: 0; }
+  .panel + .panel { margin-top: 16px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+       margin: 0 0 10px; }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  textarea { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+             background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
+  textarea.logs { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; }
+  .chip { border: 1px solid var(--border); background: var(--bg); color: var(--text);
+          padding: 3px 10px; font-size: 13px; }
+  .primary { margin-top: 14px; width: 100%; padding: 10px; border: 0; background: var(--accent);
+             color: var(--accent-text); font-weight: 600; }
+  .primary:disabled { opacity: .6; cursor: progress; }
+  .status { margin-top: 10px; color: var(--muted); min-height: 1.5em; }
+  .status.error { color: var(--critical); }
+  .recent { list-style: none; margin: 0; padding: 0; }
+  .recent li button { width: 100%; text-align: left; border: 0; background: none; color: var(--text);
+                      padding: 8px 4px; border-bottom: 1px solid var(--border); border-radius: 0; }
+  .recent li button:hover { background: var(--bg); }
+  .recent .excerpt { display: block; color: var(--muted); font-size: 13px; overflow: hidden;
+                     text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: var(--muted); }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .badge { padding: 2px 10px; border-radius: 999px; font-weight: 600; font-size: 13px;
+           border: 1px solid currentColor; }
+  .sev-critical { color: var(--critical); } .sev-major { color: var(--major); }
+  .sev-minor { color: var(--minor); } .sev-warning { color: var(--warning); }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .reason { margin: 10px 0 0; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+  dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+  ol, ul { margin: 0; padding-left: 20px; } li + li { margin-top: 6px; }
+  code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px;
+         font-family: ui-monospace, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+  .likelihood { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); }
+  .evidence, .expected { color: var(--muted); font-size: 14px; }
+  .reply { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border);
+           border-radius: 8px; padding: 12px; margin: 0; }
+  .reply-head { display: flex; justify-content: space-between; align-items: center; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>NOC Ticket Assistant</h1>
+  <p>Paste a ticket and optional device logs: the API classifies it, diagnoses it and drafts the reply. All examples are synthetic.</p>
+</header>
+
+<main>
+  <div>
+    <section class="panel">
+      <h2>Ticket</h2>
+      <div class="presets" id="presets"></div>
+      <form id="form">
+        <label for="ticket">Ticket text</label>
+        <textarea id="ticket" rows="5" required minlength="10" maxlength="5000"></textarea>
+        <label for="logs">Logs or alarms (optional)</label>
+        <textarea id="logs" class="logs" rows="6" maxlength="20000"></textarea>
+        <button class="primary" id="submit" type="submit">Analyze</button>
+        <div class="status" id="status" role="status"></div>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Recent tickets</h2>
+      <ul class="recent" id="recent"></ul>
+    </section>
+  </div>
+
+  <div id="result" hidden>
+    <section class="panel">
+      <h2>Classification</h2>
+      <div class="badges">
+        <span class="badge" id="severity"></span>
+        <span class="badge" id="category"></span>
+      </div>
+      <p class="reason" id="severity-reason"></p>
+      <dl id="entities"></dl>
+      <div class="meta" id="meta"></div>
+    </section>
+    <section class="panel" id="missing-panel">
+      <h2>Missing information</h2>
+      <ul id="missing"></ul>
+    </section>
+    <section class="panel" id="diagnosis-panel">
+      <h2>Reasoning</h2>
+      <ol id="reasoning"></ol>
+    </section>
+    <section class="panel" id="causes-panel">
+      <h2>Probable causes</h2>
+      <ol id="causes"></ol>
+    </section>
+    <section class="panel" id="steps-panel">
+      <h2>Diagnostic steps</h2>
+      <ol id="steps"></ol>
+    </section>
+    <section class="panel" id="actions-panel">
+      <h2>Recommended actions</h2>
+      <ul id="actions"></ul>
+    </section>
+    <section class="panel" id="reply-panel">
+      <div class="reply-head">
+        <h2>Customer reply draft</h2>
+        <button class="chip" id="copy" type="button">Copy</button>
+      </div>
+      <p class="reply" id="reply"></p>
+    </section>
+  </div>
+</main>
+
+<script>
+// Ticket text and model output are untrusted: they are only ever inserted with textContent.
+const PRESETS = [
+  {
+    label: "Interface errors",
+    ticket_text: "Cliente de SITE-ESTE-04 reporta cortes intermitentes y videollamadas que se congelan desde las 09:15 de hoy.",
+    logs: "sw-este-04 Gi1/0/12 is up, line protocol is up\n  5 minute input rate 412000 bits/sec\n  1873 input errors, 1650 CRC, 0 frame, 223 overrun\n  Last clearing of counters 02:10:44",
+  },
+  {
+    label: "Optic failure",
+    ticket_text: "Alarma en rtr-norte-02: la potencia de recepción del transceptor de Hu0/0/0/3 cayó por debajo del umbral. El tráfico sigue pasando por rtr-norte-01.",
+    logs: "rtr-norte-02 %PKT_INFRA-FM-3-FAULT_MAJOR: ALARM_MAJOR :RX LOS LANE-0 ALARM : Hu0/0/0/3\nrtr-norte-02 optics Hu0/0/0/3 Rx power: -28.4 dBm (low alarm threshold: -14.0 dBm)",
+  },
+  {
+    label: "Vague outage",
+    ticket_text: "No anda nada en la oficina, necesitamos que lo solucionen urgente.",
+    logs: "",
+  },
+];
+
+const $ = (id) => document.getElementById(id);
+const label = (value) => value.replaceAll("_", " ");
+
+function el(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined && text !== null) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function fillList(listId, items, render) {
+  const list = $(listId);
+  list.replaceChildren(...items.map(render));
+  return items.length > 0;
+}
+
+function setStatus(text, isError = false) {
+  $("status").textContent = text;
+  $("status").classList.toggle("error", isError);
+}
+
+function render(data) {
+  const c = data.classification;
+  $("severity").textContent = c.severity;
+  $("severity").className = `badge sev-${c.severity}`;
+  $("category").textContent = label(c.category);
+  $("severity-reason").textContent = c.severity_reason;
+
+  const entities = [
+    ["Sites", c.entities.sites], ["Devices", c.entities.devices],
+    ["Interfaces", c.entities.interfaces], ["IP addresses", c.entities.ip_addresses],
+    ["Event time", c.entities.event_time ? [c.entities.event_time] : []],
+  ].filter(([, values]) => values.length > 0);
+  $("entities").replaceChildren(...entities.flatMap(([name, values]) => [
+    el("dt", name), el("dd", values.join(", ")),
+  ]));
+
+  const u = data.usage;
+  $("meta").textContent =
+    `${data.model} · effort ${data.reasoning_effort ?? "default"} · ${data.prompt_version} · ` +
+    `${u.total_tokens.toLocaleString()} tokens` + (data.cached ? " · served from cache" : "");
+
+  $("missing-panel").hidden = !fillList("missing", c.missing_information, (q) => el("li", q));
+
+  const d = data.diagnosis;
+  for (const id of ["diagnosis-panel", "causes-panel", "steps-panel", "actions-panel", "reply-panel"]) {
+    $(id).hidden = !d;
+  }
+  if (d) {
+    fillList("reasoning", d.reasoning, (step) => el("li", step));
+    fillList("causes", d.probable_causes, (cause) => {
+      const li = el("li");
+      li.append(el("span", `${cause.likelihood} `, "likelihood"), el("span", cause.cause),
+                el("div", cause.evidence, "evidence"));
+      return li;
+    });
+    fillList("steps", d.diagnostic_steps, (step) => {
+      const li = el("li");
+      li.append(el("div", step.action));
+      if (step.command) li.append(el("code", step.command));
+      li.append(el("div", step.expected_result, "expected"));
+      return li;
+    });
+    fillList("actions", d.recommended_actions, (action) => el("li", action));
+    $("reply").textContent = d.customer_reply;
+  }
+  $("result").hidden = false;
+}
+
+async function loadRecent() {
+  try {
+    const response = await fetch("/api/v1/tickets?limit=8");
+    const page = await response.json();
+    if (!page.items.length) {
+      $("recent").replaceChildren(el("li", "No tickets analyzed yet.", "empty"));
+      return;
+    }
+    fillList("recent", page.items, (item) => {
+      const button = el("button");
+      button.type = "button";
+      const badge = el("span", item.severity, `sev-${item.severity}`);
+      button.append(badge, el("span", ` · ${label(item.category)}`),
+                    el("span", item.ticket_excerpt, "excerpt"));
+      button.addEventListener("click", () => openTicket(item.id));
+      const li = el("li");
+      li.append(button);
+      return li;
+    });
+  } catch {
+    $("recent").replaceChildren(el("li", "Could not load the ticket list.", "empty"));
+  }
+}
+
+async function openTicket(id) {
+  setStatus("Loading…");
+  const response = await fetch(`/api/v1/tickets/${encodeURIComponent(id)}`);
+  if (!response.ok) return setStatus(`Could not load the ticket (${response.status}).`, true);
+  const data = await response.json();
+  $("ticket").value = data.ticket_text;
+  $("logs").value = data.logs ?? "";
+  render({ ...data, cached: true });
+  rememberTicket(data.id);
+  setStatus("");
+}
+
+// Keep the open ticket in the URL (/?ticket=<id>) so an analysis can be linked to.
+function rememberTicket(id) {
+  history.replaceState(null, "", `?ticket=${encodeURIComponent(id)}`);
+}
+
+async function analyze(event) {
+  event.preventDefault();
+  const body = { ticket_text: $("ticket").value, logs: $("logs").value.trim() || null };
+  $("submit").disabled = true;
+  setStatus("Classifying and diagnosing… this takes 10–20 seconds.");
+  try {
+    const response = await fetch("/api/v1/tickets/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      const detail = Array.isArray(data.detail) ? data.detail.map((e) => e.msg).join("; ") : data.detail;
+      setStatus(`Error ${response.status}: ${detail}`, true);
+      return;
+    }
+    render(data);
+    rememberTicket(data.id);
+    setStatus(data.cached ? "Identical ticket already analyzed: returned from the database." : "");
+    loadRecent();
+  } catch {
+    setStatus("Could not reach the API.", true);
+  } finally {
+    $("submit").disabled = false;
+  }
+}
+
+$("presets").replaceChildren(...PRESETS.map((preset) => {
+  const button = el("button", preset.label, "chip");
+  button.type = "button";
+  button.addEventListener("click", () => {
+    $("ticket").value = preset.ticket_text;
+    $("logs").value = preset.logs;
+  });
+  return button;
+}));
+$("form").addEventListener("submit", analyze);
+$("copy").addEventListener("click", async () => {
+  await navigator.clipboard.writeText($("reply").textContent);
+  $("copy").textContent = "Copied";
+  setTimeout(() => ($("copy").textContent = "Copy"), 1500);
+});
+loadRecent();
+const linkedTicket = new URLSearchParams(location.search).get("ticket");
+if (linkedTicket) openTicket(linkedTicket);
+</script>
+</body>
+</html>

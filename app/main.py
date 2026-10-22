@@ -1,7 +1,8 @@
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app import __version__
 from app.api.routes import api_router, health_router
@@ -9,6 +10,8 @@ from app.config import get_settings
 from app.llm.client import LLMError, LLMNotConfiguredError
 
 logger = logging.getLogger(__name__)
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _register_error_handlers(app: FastAPI) -> None:
@@ -36,6 +39,12 @@ def create_app() -> FastAPI:
     _register_error_handlers(app)
     app.include_router(health_router)
     app.include_router(api_router)
+
+    @app.get("/", include_in_schema=False)
+    def demo_page() -> FileResponse:
+        """Single-page demo UI that calls the API above."""
+        return FileResponse(STATIC_DIR / "index.html")
+
     return app
 
 
