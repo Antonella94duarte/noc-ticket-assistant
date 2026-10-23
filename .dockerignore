@@ -6,4 +6,8 @@ __pycache__
 .pytest_cache
 .ruff_cache
 tests
-data
+docs
+scripts
+# Only the network seed and runbooks are needed at runtime.
+data/eval
+data/samples

@@ -1,0 +1,64 @@
+{
+  "_comment": "Synthetic snapshot of the fictional Red Austral network on 2026-10-23 (times in UTC). No real data.",
+  "sites": [
+    {"code": "SITE-NORTE-01", "name": "Nodo Norte", "role": "core", "region": "Norte", "customers_served": 40000, "backup_power_hours": 8},
+    {"code": "SITE-CENTRO-03", "name": "Datacenter Centro", "role": "datacenter", "region": "Centro", "customers_served": 12000, "backup_power_hours": 12},
+    {"code": "SITE-SUR-02", "name": "Nodo Sur", "role": "aggregation", "region": "Sur", "customers_served": 15000, "backup_power_hours": 4},
+    {"code": "SITE-ESTE-04", "name": "Acceso Este", "role": "access", "region": "Este", "customers_served": 2500, "backup_power_hours": 2},
+    {"code": "SITE-OESTE-05", "name": "Acceso Oeste", "role": "access", "region": "Oeste", "customers_served": 3000, "backup_power_hours": 2}
+  ],
+  "devices": [
+    {"hostname": "rtr-norte-01", "site_code": "SITE-NORTE-01", "role": "core_router", "vendor": "Cisco", "model": "ASR 9906", "redundancy_peer": "rtr-norte-02"},
+    {"hostname": "rtr-norte-02", "site_code": "SITE-NORTE-01", "role": "core_router", "vendor": "Cisco", "model": "ASR 9906", "redundancy_peer": "rtr-norte-01"},
+    {"hostname": "sw-centro-03", "site_code": "SITE-CENTRO-03", "role": "aggregation_switch", "vendor": "Cisco", "model": "Catalyst 9500-48Y4C", "redundancy_peer": null},
+    {"hostname": "fw-centro-03", "site_code": "SITE-CENTRO-03", "role": "firewall", "vendor": "Cisco", "model": "Firepower 4145", "redundancy_peer": null},
+    {"hostname": "rtr-sur-02", "site_code": "SITE-SUR-02", "role": "aggregation_router", "vendor": "Cisco", "model": "ASR 9901", "redundancy_peer": null},
+    {"hostname": "sw-este-04", "site_code": "SITE-ESTE-04", "role": "access_switch", "vendor": "Cisco", "model": "Catalyst 9300-48P", "redundancy_peer": null},
+    {"hostname": "olt-este-04", "site_code": "SITE-ESTE-04", "role": "olt", "vendor": "Huawei", "model": "MA5800-X7", "redundancy_peer": null},
+    {"hostname": "rtr-oeste-05", "site_code": "SITE-OESTE-05", "role": "access_router", "vendor": "Cisco", "model": "ASR 920", "redundancy_peer": null}
+  ],
+  "links": [
+    {"id": 1, "kind": "backbone", "a_device": "rtr-norte-01", "a_interface": "Hu0/0/0/0", "b_device": "rtr-sur-02", "b_interface": "Hu0/0/0/0", "b_description": null, "bundle": null, "status": "up"},
+    {"id": 2, "kind": "backbone", "a_device": "rtr-norte-02", "a_interface": "Hu0/0/0/3", "b_device": "rtr-sur-02", "b_interface": "Hu0/0/0/1", "b_description": null, "bundle": null, "status": "down"},
+    {"id": 3, "kind": "backbone", "a_device": "rtr-norte-01", "a_interface": "TenGigE0/0/0/1", "b_device": "rtr-norte-02", "b_interface": "TenGigE0/0/0/1", "b_description": null, "bundle": null, "status": "up"},
+    {"id": 4, "kind": "bundle_member", "a_device": "rtr-norte-01", "a_interface": "Te0/0/0/4", "b_device": "sw-centro-03", "b_interface": "Te1/0/1", "b_description": null, "bundle": "Bundle-Ether20", "status": "up"},
+    {"id": 5, "kind": "bundle_member", "a_device": "rtr-norte-01", "a_interface": "Te0/0/0/5", "b_device": "sw-centro-03", "b_interface": "Te1/0/2", "b_description": null, "bundle": "Bundle-Ether20", "status": "down"},
+    {"id": 6, "kind": "uplink", "a_device": "sw-centro-03", "a_interface": "Te1/0/10", "b_device": "rtr-norte-02", "b_interface": "Te0/0/0/4", "b_description": null, "bundle": null, "status": "up"},
+    {"id": 7, "kind": "uplink", "a_device": "sw-este-04", "a_interface": "Te1/1/1", "b_device": "sw-centro-03", "b_interface": "Te1/0/20", "b_description": null, "bundle": null, "status": "down"},
+    {"id": 8, "kind": "uplink", "a_device": "sw-este-04", "a_interface": "Te1/1/2", "b_device": "rtr-norte-01", "b_interface": "Te0/0/0/8", "b_description": null, "bundle": null, "status": "up"},
+    {"id": 9, "kind": "access", "a_device": "olt-este-04", "a_interface": "GE0/9/0", "b_device": "sw-este-04", "b_interface": "Gi1/0/1", "b_description": null, "bundle": null, "status": "up"},
+    {"id": 10, "kind": "uplink", "a_device": "rtr-oeste-05", "a_interface": "Gi0/0/0", "b_device": "rtr-sur-02", "b_interface": "Gi0/0/10", "b_description": null, "bundle": null, "status": "up"},
+    {"id": 11, "kind": "firewall", "a_device": "sw-centro-03", "a_interface": "Te1/0/30", "b_device": "fw-centro-03", "b_interface": "Ethernet1/1", "b_description": null, "bundle": null, "status": "up"},
+    {"id": 12, "kind": "transit", "a_device": "rtr-norte-01", "a_interface": "Hu0/0/0/5", "b_device": null, "b_interface": null, "b_description": "Transit provider AS64520", "bundle": null, "status": "up"},
+    {"id": 13, "kind": "transit", "a_device": "rtr-norte-02", "a_interface": "Hu0/0/0/5", "b_device": null, "b_interface": null, "b_description": "Transit provider AS64510", "bundle": null, "status": "up"}
+  ],
+  "circuits": [
+    {"circuit_id": "ESTE-4471", "customer_name": "Ferretería Los Andes", "service": "internet", "site_code": "SITE-ESTE-04", "access_device": "olt-este-04", "access_interface": "ONU 0/2/7"},
+    {"circuit_id": "ESTE-4502", "customer_name": "Transportes Lago", "service": "l2vpn", "site_code": "SITE-ESTE-04", "access_device": "sw-este-04", "access_interface": "Gi1/0/12"},
+    {"circuit_id": "ESTE-4520", "customer_name": "Estudio Contable Ríos", "service": "internet", "site_code": "SITE-ESTE-04", "access_device": "olt-este-04", "access_interface": "ONU 0/2/9"},
+    {"circuit_id": "SUR-2210", "customer_name": "Distribuidora Del Sur", "service": "internet", "site_code": "SITE-SUR-02", "access_device": "rtr-sur-02", "access_interface": "Gi0/0/3"},
+    {"circuit_id": "SUR-2231", "customer_name": "Clínica San Rafael", "service": "internet", "site_code": "SITE-SUR-02", "access_device": "rtr-sur-02", "access_interface": "Gi0/0/4"},
+    {"circuit_id": "CENTRO-0090", "customer_name": "Banco Austral", "service": "colocation", "site_code": "SITE-CENTRO-03", "access_device": "sw-centro-03", "access_interface": "Gi1/0/24"},
+    {"circuit_id": "NORTE-1188", "customer_name": "Colegio Horizonte", "service": "internet", "site_code": "SITE-NORTE-01", "access_device": "rtr-norte-01", "access_interface": "Gi0/0/0/12"},
+    {"circuit_id": "OESTE-0315", "customer_name": "Agroexport Valle", "service": "internet", "site_code": "SITE-OESTE-05", "access_device": "rtr-oeste-05", "access_interface": "Gi0/0/5"}
+  ],
+  "alarms": [
+    {"id": 1, "site_code": "SITE-NORTE-01", "device_hostname": "rtr-norte-02", "interface": "Hu0/0/0/3", "alarm_type": "optical_rx_los", "severity": "major", "message": "RX LOS LANE-0: Rx power -28.4 dBm (low alarm threshold -14.0 dBm)", "raised_at": "2026-10-23T05:12:00Z", "cleared_at": null},
+    {"id": 2, "site_code": "SITE-NORTE-01", "device_hostname": "rtr-norte-02", "interface": "Hu0/0/0/3", "alarm_type": "link_down", "severity": "major", "message": "Interface Hu0/0/0/3 (backbone to rtr-sur-02) changed state to down", "raised_at": "2026-10-23T05:12:03Z", "cleared_at": null},
+    {"id": 3, "site_code": "SITE-NORTE-01", "device_hostname": "rtr-norte-01", "interface": "Te0/0/0/5", "alarm_type": "bundle_member_down", "severity": "major", "message": "Te0/0/0/5 is no longer active in Bundle-Ether20 (link down): 1 of 2 members active", "raised_at": "2026-10-23T07:40:00Z", "cleared_at": null},
+    {"id": 4, "site_code": "SITE-ESTE-04", "device_hostname": "sw-este-04", "interface": "Te1/1/1", "alarm_type": "link_down", "severity": "major", "message": "Uplink Te1/1/1 to sw-centro-03 changed state to down; traffic on Te1/1/2 only", "raised_at": "2026-10-23T09:05:00Z", "cleared_at": null},
+    {"id": 5, "site_code": "SITE-ESTE-04", "device_hostname": "sw-este-04", "interface": "Te1/1/2", "alarm_type": "high_utilization", "severity": "warning", "message": "Uplink Te1/1/2 utilization 92% for 20 min (threshold 80%)", "raised_at": "2026-10-23T12:30:00Z", "cleared_at": null},
+    {"id": 6, "site_code": "SITE-ESTE-04", "device_hostname": "sw-este-04", "interface": "Gi1/0/12", "alarm_type": "interface_errors", "severity": "minor", "message": "1650 CRC input errors in 15 min on Gi1/0/12 (threshold 100)", "raised_at": "2026-10-23T12:15:00Z", "cleared_at": null},
+    {"id": 7, "site_code": "SITE-ESTE-04", "device_hostname": "olt-este-04", "interface": "ONU 0/2/7", "alarm_type": "onu_los", "severity": "major", "message": "ONU 0/2/7 LOSi (loss of signal), last seen 11:29:41", "raised_at": "2026-10-23T11:29:41Z", "cleared_at": null},
+    {"id": 8, "site_code": "SITE-ESTE-04", "device_hostname": null, "interface": null, "alarm_type": "shelter_temperature", "severity": "warning", "message": "Shelter temperature 31 °C (warning threshold 30 °C)", "raised_at": "2026-10-23T13:00:00Z", "cleared_at": null},
+    {"id": 9, "site_code": "SITE-SUR-02", "device_hostname": null, "interface": null, "alarm_type": "ac_input_failure", "severity": "major", "message": "Commercial AC power lost; site running on batteries", "raised_at": "2026-10-23T12:35:00Z", "cleared_at": null},
+    {"id": 10, "site_code": "SITE-SUR-02", "device_hostname": null, "interface": null, "alarm_type": "battery_discharge", "severity": "minor", "message": "Battery discharge in progress: 78% remaining, estimated autonomy 3 h", "raised_at": "2026-10-23T13:10:00Z", "cleared_at": null},
+    {"id": 11, "site_code": "SITE-SUR-02", "device_hostname": "rtr-sur-02", "interface": "Gi0/0/3", "alarm_type": "link_down", "severity": "major", "message": "Interface Gi0/0/3 changed state to down (no light from customer side)", "raised_at": "2026-10-23T10:45:00Z", "cleared_at": null},
+    {"id": 12, "site_code": "SITE-SUR-02", "device_hostname": "rtr-sur-02", "interface": "Gi0/0/3", "alarm_type": "link_down", "severity": "major", "message": "Interface Gi0/0/3 changed state to down", "raised_at": "2026-10-22T16:02:00Z", "cleared_at": "2026-10-22T16:09:00Z"},
+    {"id": 13, "site_code": "SITE-SUR-02", "device_hostname": "rtr-sur-02", "interface": "Hu0/0/0/1", "alarm_type": "link_down", "severity": "major", "message": "Interface Hu0/0/0/1 (backbone to rtr-norte-02) changed state to down", "raised_at": "2026-10-23T05:12:04Z", "cleared_at": null},
+    {"id": 14, "site_code": "SITE-CENTRO-03", "device_hostname": "sw-centro-03", "interface": null, "alarm_type": "psu_failure", "severity": "major", "message": "Power supply 1 failed, power supply 2 OK", "raised_at": "2026-10-22T19:10:00Z", "cleared_at": null},
+    {"id": 15, "site_code": "SITE-CENTRO-03", "device_hostname": "sw-centro-03", "interface": "Gi1/0/24", "alarm_type": "config_change", "severity": "warning", "message": "Configuration change: VLAN 210 removed from allowed VLANs on trunk Gi1/0/24 by user netops-luis", "raised_at": "2026-10-23T02:10:00Z", "cleared_at": null},
+    {"id": 16, "site_code": "SITE-CENTRO-03", "device_hostname": "fw-centro-03", "interface": null, "alarm_type": "high_cpu", "severity": "warning", "message": "CPU 88% for 15 min (threshold 85%)", "raised_at": "2026-10-23T07:30:00Z", "cleared_at": "2026-10-23T08:00:00Z"},
+    {"id": 17, "site_code": "SITE-OESTE-05", "device_hostname": "rtr-oeste-05", "interface": "Gi0/0/0", "alarm_type": "interface_flap", "severity": "minor", "message": "Uplink Gi0/0/0 flapped 6 times in 10 min", "raised_at": "2026-10-22T22:40:00Z", "cleared_at": "2026-10-22T23:00:00Z"}
+  ]
+}

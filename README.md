@@ -310,6 +310,31 @@ scripts/evaluate.py      # runs the eval set against the real model
 tests/
 ```
 
+## Next: NOC Agents (in progress)
+
+The project is evolving into a multi-agent system that investigates before diagnosing: instead
+of reading only the ticket, agents query the network and the procedures a NOC engineer would use.
+The chained pipeline above stays as the baseline to compare against.
+See [ADR 0001](docs/decisions/0001-evolve-into-agents.md).
+
+Done so far:
+
+- **Network data**: sites, devices (with redundancy pairs), links, customer circuits and alarms
+  in PostgreSQL (`app/db/models.py`, migration in `alembic/`). A synthetic snapshot in
+  `data/network/seed.json` is loaded with `python -m app.db.seed` (and on container start). It
+  contains several incidents to investigate plus noise and cleared alarms.
+- **Tools** (`app/tools/network.py`): `get_active_alarms`, `get_device`, `get_site` and
+  `find_circuits`. Plain functions, independent of any agent framework, with compact results,
+  capped lists that report truncation, and suggestions when a name is wrong. Active-alarm
+  lookups use partial indexes.
+- **Runbooks** (`data/runbooks/`): nine synthetic procedures (link down, optical power, CRC
+  errors, bundle members, power, PSU/rectifier, configuration rollback, customer without service,
+  congestion) for retrieval in the next phase.
+
+Next: a provider-agnostic LLM layer (OpenAI, DeepSeek, Ollama) with fallback, LangGraph agents,
+LlamaIndex retrieval over the runbooks, a CrewAI comparison and an evaluation of agents vs the
+baseline and across models.
+
 ## Limitations and next steps
 
 - **Run-to-run variation**: two cases still fail in one run out of two (see above); more runs
