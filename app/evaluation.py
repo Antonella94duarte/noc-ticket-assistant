@@ -1,15 +1,16 @@
-"""Score classifications against a labeled set of synthetic tickets.
+"""Score analyses against a labeled set of synthetic tickets.
 
 Used by scripts/evaluate.py to compare prompt versions or settings with numbers instead of a few
 hand-checked examples. An expected value may be a list when more than one answer is defensible
-under the rubric, so ambiguity in the labels isn't counted as a model error.
+under the rubric, so ambiguity in the labels isn't counted as a model error. Optional labels
+(questions, customer reply) are only checked on the cases that have them.
 """
 
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.schemas import IncidentCategory, Severity, TicketClassification
+from app.schemas import IncidentCategory, Severity, TicketClassification, TicketDiagnosis
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class EvalCase:
     categories: frozenset[str]
     severities: frozenset[str]
     expects_questions: bool | None = None
+    expects_customer_reply: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -29,10 +31,16 @@ class CaseResult:
     category_ok: bool
     severity_ok: bool
     questions_ok: bool | None  # None when the case has no expectation about questions
+    reply_ok: bool | None = None  # None when unlabeled or the diagnosis wasn't run
 
     @property
     def passed(self) -> bool:
-        return self.category_ok and self.severity_ok and self.questions_ok is not False
+        return (
+            self.category_ok
+            and self.severity_ok
+            and self.questions_ok is not False
+            and self.reply_ok is not False
+        )
 
 
 def _as_set(value: str | list[str], allowed: type) -> frozenset[str]:
@@ -57,19 +65,28 @@ def load_cases(path: Path) -> list[EvalCase]:
                 categories=_as_set(expected["category"], IncidentCategory),
                 severities=_as_set(expected["severity"], Severity),
                 expects_questions=expected.get("expects_questions"),
+                expects_customer_reply=expected.get("customer_reply"),
             )
         )
     return cases
 
 
-def score(case: EvalCase, classification: TicketClassification) -> CaseResult:
+def score(
+    case: EvalCase,
+    classification: TicketClassification,
+    diagnosis: TicketDiagnosis | None = None,
+) -> CaseResult:
     questions_ok = None
     if case.expects_questions is not None:
         questions_ok = bool(classification.missing_information) == case.expects_questions
+    reply_ok = None
+    if diagnosis is not None and case.expects_customer_reply is not None:
+        reply_ok = bool(diagnosis.customer_reply) == case.expects_customer_reply
     return CaseResult(
         case=case,
         classification=classification,
         category_ok=classification.category.value in case.categories,
         severity_ok=classification.severity.value in case.severities,
         questions_ok=questions_ok,
+        reply_ok=reply_ok,
     )

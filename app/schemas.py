@@ -61,7 +61,8 @@ class TicketClassification(BaseModel):
     severity_reason: str = Field(description="One sentence justifying the severity.")
     entities: ExtractedEntities
     missing_information: list[str] = Field(
-        description="Questions to ask the customer when data needed to diagnose is missing."
+        description="Questions about data still missing to diagnose: for the customer, or for the "
+        "NOC team when the ticket is an internal alarm."
     )
 
 
@@ -100,7 +101,10 @@ class TicketDiagnosis(BaseModel):
     recommended_actions: list[str] = Field(
         description="Immediate actions: mitigation, escalation, field dispatch."
     )
-    customer_reply: str = Field(description="Draft reply to the customer.")
+    customer_reply: str | None = Field(
+        description="Draft reply to the customer, or null when no customer reported the incident "
+        "(internal monitoring alarm)."
+    )
 
 
 # --- Ticket analysis: API response ---

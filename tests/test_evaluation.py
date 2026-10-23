@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from app.evaluation import EvalCase, load_cases, score
-from app.schemas import TicketClassification
-from tests.conftest import SAMPLE_CLASSIFICATION
+from app.schemas import TicketClassification, TicketDiagnosis
+from tests.conftest import SAMPLE_CLASSIFICATION, SAMPLE_DIAGNOSIS
 
 EVAL_SET = Path(__file__).resolve().parents[1] / "data" / "eval" / "classification.jsonl"
 
@@ -63,3 +63,14 @@ def test_questions_expectation_is_checked_only_when_labeled():
 
     assert unlabeled.questions_ok is None and unlabeled.passed
     assert expects.questions_ok is False and not expects.passed
+
+
+def test_customer_reply_is_checked_only_with_a_diagnosis_and_a_label():
+    diagnosis = TicketDiagnosis.model_validate({**SAMPLE_DIAGNOSIS, "customer_reply": None})
+    internal = make_case(expects_customer_reply=False)
+    customer = make_case(expects_customer_reply=True)
+
+    assert score(internal, classify()).reply_ok is None  # diagnosis not run
+    assert score(internal, classify(), diagnosis).reply_ok is True
+    assert score(customer, classify(), diagnosis).reply_ok is False
+    assert not score(customer, classify(), diagnosis).passed

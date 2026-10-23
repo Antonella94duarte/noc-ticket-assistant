@@ -13,8 +13,8 @@ from app.llm.client import Message
 from app.schemas import TicketClassification
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
-CLASSIFY_PROMPT_VERSION = "classify_v2"
-DIAGNOSE_PROMPT_VERSION = "diagnose_v1"
+CLASSIFY_PROMPT_VERSION = "classify_v3"
+DIAGNOSE_PROMPT_VERSION = "diagnose_v2"
 
 # Matches our delimiter tags, so text inside the ticket can't close them and smuggle instructions
 # outside the data block.

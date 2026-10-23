@@ -15,6 +15,7 @@ or alarms, it returns structured JSON with:
 - **Diagnosis**: step-by-step reasoning, probable causes with their evidence, diagnostic steps
   with CLI commands and immediate actions.
 - **Customer reply draft**: professional and empathetic, without internal jargon or promises.
+  Internal monitoring alarms get no customer reply: their open questions go to the NOC team.
 
 ![Demo UI showing a classified and diagnosed ticket](docs/screenshots/overview.png)
 
@@ -82,18 +83,19 @@ sequenceDiagram
 
 Each ticket goes through two chained model calls (`app/services/analyzer.py`):
 
-1. **Classify** (`classify_v2`): category, severity, entities and the questions still open for
-   the customer. Few-shot, short output.
-2. **Diagnose** (`diagnose_v1`): receives the ticket plus the classification as JSON and returns
-   the reasoning, probable causes, diagnostic steps, actions and the customer reply.
+1. **Classify** (`classify_v3`): category, severity, entities and the questions still open.
+   Few-shot, short output.
+2. **Diagnose** (`diagnose_v2`): receives the ticket plus the classification as JSON, decides
+   whether a customer or internal monitoring reported it, and returns the reasoning, probable
+   causes, diagnostic steps, actions and, for customer tickets, the reply draft.
 
 Splitting the work keeps each prompt focused, lets each step be versioned and tested on its own,
 and gives the diagnosis a structured starting point. If either call fails, nothing is stored, so
 a half analysis is never served from the cache.
 
 With `gpt-6-luna` at `medium` reasoning effort, an analysis of the sample tickets takes about
-13-18 s and ~5,500 tokens, about US$0.0013. A repeated ticket is answered from the database in
-~20 ms.
+13-18 s and 5,000-6,500 tokens including hidden reasoning, about US$0.0015. A repeated ticket is
+answered from the database in ~20 ms.
 
 ## Prompt engineering
 
@@ -106,7 +108,7 @@ analyses stay traceable.
 | Role, tone and context | System prompts set a senior NOC engineer role and describe a small fictional network used to judge impact |
 | Delimiters | The ticket and logs go inside `<ticket>` and `<logs>` tags and are declared as data. Tags written inside them are neutralized so text can't break out of its block. The classification passed to the second call gets the same treatment |
 | Few-shot | Five classification examples sent as user/assistant turns, validated against the schema at load time. One contains a prompt-injection attempt that the expected answer ignores; another teaches that lost redundancy is `major` |
-| Conditional output | When data is missing, the classification lists questions instead of guessing, and the diagnosis marks itself as provisional and asks those questions in the customer reply |
+| Conditional output | When data is missing, the classification lists questions instead of guessing, and the diagnosis marks itself as provisional. Vague tickets are classified by the symptom they actually state. Internal alarms get no customer reply, and their questions are addressed to the NOC team |
 | Chain of thought | `reasoning` is the first field of the diagnosis schema: the model writes JSON in schema order, so it lays out the evidence before concluding, and the operator can audit it |
 | Structured output | OpenAI Structured Outputs enforce the Pydantic schemas, and replies are validated again on our side. Refusals and truncated replies become a `502` instead of bad data |
 | Chained calls | Classify first, then diagnose using the classification |
@@ -162,7 +164,7 @@ curl -X POST http://localhost:8000/api/v1/tickets/analyze \
   },
   "model": "gpt-6-luna",
   "reasoning_effort": "medium",
-  "prompt_version": "classify_v2+diagnose_v1",
+  "prompt_version": "classify_v3+diagnose_v2",
   "usage": {"input_tokens": 3785, "output_tokens": 1804, "reasoning_tokens": 273, "total_tokens": 5589}
 }
 ```
@@ -219,35 +221,49 @@ ruff check . && ruff format --check .
 
 ## Evaluating prompts
 
-`data/eval/classification.jsonl` holds 12 labeled synthetic tickets, separate from the few-shot
-examples and the samples. When a case has more than one defensible answer under the rubric, its
-label lists all of them, so label ambiguity isn't counted as a model error.
+`data/eval/classification.jsonl` holds 23 labeled synthetic tickets, separate from the few-shot
+examples. They include vague tickets with and without an outage, internal alarms with lost
+redundancy, prompt injections in the ticket and in the logs, an English ticket and the three
+samples that motivated earlier prompt fixes. When a case has more than one defensible answer
+under the rubric, its label lists all of them; whether a customer reply is expected is labeled
+only where it is clear.
 
-`scripts/evaluate.py` runs the classification step over them with the real model and reports
-accuracy and tokens. It spends tokens, so it runs by hand, not in CI:
+`scripts/evaluate.py` runs the pipeline over them with the real model and reports accuracy,
+whether a customer reply was drafted when it should be, and the length of the diagnosis. It
+spends tokens, so it runs by hand, not in CI:
 
 ```bash
-python scripts/evaluate.py                                   # current prompt and settings
-python scripts/evaluate.py --prompt-version classify_v1 --effort low
+python scripts/evaluate.py                                    # classification only
+python scripts/evaluate.py --with-diagnosis --runs 2          # both calls, two runs
+python scripts/evaluate.py --prompt-version classify_v2 --effort low
 ```
 
-Results with `gpt-6-luna` (one run each):
+Results with `gpt-6-luna`, two runs of the 23 cases (46 analyses per row):
 
-| Prompt | Effort | Category | Severity | Output tokens |
-|---|---|---|---|---|
-| classify_v2 | medium | 12/12 | 12/12 | 4,171 |
-| classify_v1 | medium | 12/12 | 12/12 | 3,597 |
-| classify_v2 | low | 11/12 | 11/12 | 1,240 |
+| Prompts | Effort | Category | Severity | Customer reply ok | Diagnosis length (visible tokens) |
+|---|---|---|---|---|---|
+| classify_v2 + diagnose_v1 | medium | 46/46 | 46/46 | 28/42 | mean 1,018, max 1,320 |
+| classify_v3 + diagnose_v2 | medium | 46/46 | 45/46 | **41/42** | **mean 840, max 1,068** |
+| classify_v2 | low | 44/46 | 44/46 | | |
+| classify_v3 | low | **46/46** | **46/46** | | |
 
-What this shows:
+How the current prompts got here:
 
-- At `medium` effort both prompts get every case right, so this set no longer separates them. It
-  works as a regression guard; telling prompt versions apart needs harder cases.
-- At `low` effort, `classify_v2` labeled "Tenemos problemas con el servicio" as a major
-  connectivity loss: the new rule for vague total outages ("no anda nada") was applied to a
-  ticket that never says the service is down. A prompt fix can introduce its own error, which is
-  why the set exists.
-- One run per configuration doesn't capture the model's run-to-run variation.
+- **Internal alarms**: `diagnose_v1` drafted a customer reply for every monitoring alarm. A first
+  `diagnose_v2` that only described internal alarms in general still drafted replies for the four
+  that didn't name their source (34/42); defining a customer ticket as one a customer actually
+  reports took it to 41/42.
+- **Shorter diagnoses**: explicit limits on items and sentences cut the visible output by 17%.
+  Measuring this needed care: `output_tokens` includes hidden reasoning tokens, which at first
+  hid the change.
+- **Vague tickets**: at `low` effort, `classify_v2` turned "Tenemos problemas con el servicio"
+  into a major outage, over-applying its rule for "no anda nada". `classify_v3` only treats a
+  ticket as an outage when it says the service is down. The first version of that fix then
+  rated a failed redundant power supply as `warning` at `low`; naming power supplies and
+  rectifiers in the redundancy rule fixed it.
+- **Remaining misses** (one run out of two each): the redundant power supply rated `warning`, and
+  no reply drafted for "un cliente no puede entrar por SSH", a ticket about a customer written in
+  the third person.
 
 ## Configuration
 
@@ -284,25 +300,24 @@ app/
 ├── llm/
 │   ├── client.py        # LLMClient interface and OpenAI implementation
 │   ├── prompt_builder.py
-│   └── prompts/         # classify_v1, classify_v2, diagnose_v1
+│   └── prompts/         # classify_v1..v3, diagnose_v1..v2 (old versions kept)
 ├── services/            # analyzer (chained calls), tickets (cache + persistence)
 └── static/index.html    # demo UI
 alembic/                 # migrations
 data/samples/            # synthetic tickets for manual testing
-data/eval/               # labeled synthetic tickets for prompt evaluation
+data/eval/               # 23 labeled synthetic tickets for prompt evaluation
 scripts/evaluate.py      # runs the eval set against the real model
 tests/
 ```
 
 ## Limitations and next steps
 
-- **Internal alarms**: the diagnosis prompt assumes every ticket comes from a customer, so for a
-  monitoring alarm the reply draft still addresses "the customer". A `diagnose_v2` should tell
-  the two apart.
-- **Verbose diagnoses**: replies run 1,400-1,900 output tokens and some steps repeat commands;
-  limiting the number and length of steps would cut cost and latency.
-- **Evaluation**: the eval set needs harder cases (including the ones that motivated
-  `classify_v2`), several runs per configuration and an eval for the diagnosis step.
+- **Run-to-run variation**: two cases still fail in one run out of two (see above); more runs
+  and cases would give tighter numbers.
+- **Diagnosis quality**: the eval checks the reply decision and the length of the diagnosis, not
+  whether its causes and steps are right. That would need expert labels or an LLM-as-judge.
+- **Who reported the ticket** is inferred from the text; a real integration would take it from
+  the ticketing system.
 - **Latency**: the two calls run sequentially and take 13-18 s; streaming or running the
   diagnosis in the background would improve the experience.
 - **Network context**: the network catalog is hardcoded in the prompts; a real deployment would

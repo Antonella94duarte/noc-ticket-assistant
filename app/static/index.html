@@ -127,6 +127,7 @@
     <section class="panel" id="actions-panel">
       <h2>Recommended actions</h2>
       <ul id="actions"></ul>
+      <p class="meta" id="no-reply" hidden>Internal alarm: no customer reply drafted.</p>
     </section>
     <section class="panel" id="reply-panel">
       <div class="reply-head">
@@ -222,7 +223,10 @@ function render(data) {
       return li;
     });
     fillList("actions", d.recommended_actions, (action) => el("li", action));
-    $("reply").textContent = d.customer_reply;
+    // Null for internal alarms: nobody outside the NOC to reply to.
+    $("reply-panel").hidden = !d.customer_reply;
+    $("reply").textContent = d.customer_reply ?? "";
+    $("no-reply").hidden = Boolean(d.customer_reply);
   }
   $("result").hidden = false;
 }

@@ -3,7 +3,7 @@ import json
 from app.llm.client import LLMError, LLMNotConfiguredError, get_llm_client
 from app.main import app
 from app.schemas import TicketClassification, TicketDiagnosis
-from tests.conftest import SAMPLE_CLASSIFICATION, FakeLLM
+from tests.conftest import SAMPLE_CLASSIFICATION, SAMPLE_DIAGNOSIS, FakeLLM
 
 URL = "/api/v1/tickets/analyze"
 TICKET = {
@@ -32,7 +32,7 @@ def test_analyze_stores_and_returns_the_analysis(db_client):
     assert body["ticket_text"] == TICKET["ticket_text"]
     assert body["model"] == "fake-model"
     assert body["reasoning_effort"] == "low"
-    assert body["prompt_version"] == "classify_v2+diagnose_v1"
+    assert body["prompt_version"] == "classify_v3+diagnose_v2"
 
     stored = db_client.get(f"/api/v1/tickets/{body['id']}")
     assert stored.status_code == 200
@@ -161,3 +161,14 @@ def test_analyze_returns_503_when_llm_not_configured(db_client):
     response = db_client.post(URL, json=TICKET)
 
     assert response.status_code == 503
+
+
+def test_internal_alarm_can_have_no_customer_reply(db_client):
+    internal = {**SAMPLE_DIAGNOSIS, "customer_reply": None}
+    use_llm(FakeLLM(outputs={TicketDiagnosis: internal}))
+
+    body = db_client.post(URL, json=TICKET).json()
+
+    assert body["diagnosis"]["customer_reply"] is None
+    stored = db_client.get(f"/api/v1/tickets/{body['id']}").json()
+    assert stored["diagnosis"]["customer_reply"] is None
