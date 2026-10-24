@@ -75,6 +75,7 @@ def create_chat_model(
             max_tokens=settings.llm_max_tokens,
             timeout=settings.openai_timeout_seconds,
             max_retries=MAX_RETRIES,
+            reasoning_effort=settings.deepseek_reasoning_effort,
             extra_body=(
                 None
                 if thinking is None
@@ -90,6 +91,7 @@ def create_chat_model(
             base_url=settings.ollama_base_url,
             temperature=settings.llm_temperature,
             num_predict=settings.llm_max_tokens,
+            num_ctx=settings.ollama_num_ctx,
             reasoning=settings.ollama_reasoning,
         )
 

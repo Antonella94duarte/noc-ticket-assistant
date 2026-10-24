@@ -152,3 +152,26 @@ class TicketPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# --- Agent analysis (app/agents) ---
+
+
+class ToolCallRecord(BaseModel):
+    name: str
+    args: dict
+    result: str = Field(description="What the tool returned to the model (compact JSON).")
+
+
+class AgentAnalysis(BaseModel):
+    classification: TicketClassification
+    findings: str = Field(description="The investigator's summary of what it checked and found.")
+    diagnosis: TicketDiagnosis
+    tool_calls: list[ToolCallRecord]
+    investigation_model_calls: int
+    limit_reached: bool = Field(
+        description="True when the investigator hit its tool or model call limit."
+    )
+    prompt_version: str
+    usage_by_model: dict[str, TokenUsage]
+    latency_seconds: float

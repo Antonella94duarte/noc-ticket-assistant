@@ -23,7 +23,8 @@ All tickets, logs, sites and devices in this repository are synthetic.
 
 ## Quick start
 
-Requires Docker and an OpenAI API key.
+Requires Docker and an OpenAI API key. Where to get the keys for OpenAI and DeepSeek, and how
+to set up a free local model with Ollama: [docs/providers-setup.md](docs/providers-setup.md).
 
 ```bash
 cp .env.example .env          # then set OPENAI_API_KEY
@@ -337,8 +338,19 @@ Done so far:
   `python scripts/check_providers.py` checks each provider's tool calling and structured output
   with real calls.
 
-Next: LangGraph agents, LlamaIndex retrieval over the runbooks, a CrewAI comparison and an
-evaluation of agents vs the baseline and across models.
+- **LangGraph agent** (`app/agents/graph.py`): triage -> investigate -> report. The investigator
+  is a tool-calling agent that looks up circuits, alarms and topology before anything is
+  diagnosed, with LangChain middleware limiting its tool and model calls and falling back to other
+  providers. Each run reports the tool calls and their results, tokens per model and latency. See
+  [ADR 0003](docs/decisions/0003-langgraph-investigation-agent.md) for the design and the first
+  runs on OpenAI, DeepSeek and Ollama.
+
+  ```bash
+  python scripts/run_agent.py --scenario customer-no-service   # or slow-site, config-change, ...
+  ```
+
+Next: LlamaIndex retrieval over the runbooks, an evaluation of the agent against the baseline and
+across models, and a CrewAI comparison.
 
 ## Limitations and next steps
 

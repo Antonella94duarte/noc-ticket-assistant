@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     # DeepSeek thinks by default (None keeps that). Thinking mode ignores temperature and can't
     # force a tool call, so structured output then uses JSON mode (see app/llm/providers.py).
     deepseek_thinking: bool | None = None
+    # Thinking effort ("high" is DeepSeek's own default). At "high" the long report prompt spent
+    # the whole LLM_MAX_TOKENS budget on reasoning and returned no answer, so we default to low.
+    deepseek_reasoning_effort: Literal["low", "high", "max"] | None = "low"
 
     # From inside Docker the host's Ollama is http://host.docker.internal:11434.
     ollama_base_url: str = "http://localhost:11434"
@@ -53,6 +56,14 @@ class Settings(BaseSettings):
     # Thinking models such as qwen3 reason before answering by default (None keeps the model's
     # default). False is much faster on a laptop GPU, at some cost in accuracy.
     ollama_reasoning: bool | None = None
+    # Context window. Ollama's default (4096 tokens) is too small for the few-shot triage prompt
+    # plus a JSON schema: the model then answers with nothing. More context uses more VRAM.
+    ollama_num_ctx: int = 16384
+
+    # Investigation agent: after this many tool calls it must conclude with what it found; the
+    # model-call limit is the hard stop that keeps a confused agent from looping on our bill.
+    agent_max_tool_calls: int = 8
+    agent_max_model_calls: int = 6
 
     @property
     def fallback_providers(self) -> list[Provider]:
