@@ -10,3 +10,7 @@ langchain>=1.4,<2.0
 langchain-openai>=1.7,<2.0
 langchain-deepseek>=1.1,<2.0
 langchain-ollama>=1.1,<2.0
+llama-index-core>=0.14,<0.15
+llama-index-retrievers-bm25>=0.8,<0.9
+llama-index-embeddings-openai>=0.7,<0.8
+llama-index-embeddings-ollama>=0.10,<0.11

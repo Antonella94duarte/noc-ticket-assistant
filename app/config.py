@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     # plus a JSON schema: the model then answers with nothing. More context uses more VRAM.
     ollama_num_ctx: int = 16384
 
+    # Runbook retrieval (app/rag/runbooks.py): bm25 (offline, free), openai or ollama embeddings.
+    runbook_retriever: Literal["bm25", "openai", "ollama"] = "bm25"
+    runbook_top_k: int = 3
+    openai_embedding_model: str = "text-embedding-3-small"
+    # Multilingual, so Spanish tickets can match the English runbooks.
+    ollama_embedding_model: str = "bge-m3"
+
     # Investigation agent: after this many tool calls it must conclude with what it found; the
     # model-call limit is the hard stop that keeps a confused agent from looping on our bill.
     agent_max_tool_calls: int = 8

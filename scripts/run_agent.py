@@ -40,13 +40,17 @@ def main() -> int:
     parser.add_argument("--scenario", choices=sorted(SCENARIOS))
     parser.add_argument("--logs")
     parser.add_argument("--json", action="store_true", help="Print the full result as JSON")
+    parser.add_argument(
+        "--no-runbooks", action="store_true", help="Run without the runbook search tool"
+    )
     args = parser.parse_args()
     ticket = SCENARIOS[args.scenario] if args.scenario else args.ticket
     if not ticket:
         parser.error("give a ticket text or --scenario")
 
     settings = get_settings()
-    analysis = run_agent_analysis(build_default_graph(settings), ticket, args.logs, settings)
+    graph = build_default_graph(settings, with_runbooks=not args.no_runbooks)
+    analysis = run_agent_analysis(graph, ticket, args.logs, settings)
 
     if args.json:
         print(analysis.model_dump_json(indent=2))
@@ -65,6 +69,9 @@ def main() -> int:
     print("Probable causes:")
     for cause in d.probable_causes:
         print(f"  - [{cause.likelihood.value}] {cause.cause} | {cause.evidence}")
+    print("Diagnostic steps:")
+    for step in d.diagnostic_steps:
+        print(f"  - {step.action}")
     print("Recommended actions:")
     for action in d.recommended_actions:
         print(f"  - {action}")

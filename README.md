@@ -349,8 +349,21 @@ Done so far:
   python scripts/run_agent.py --scenario customer-no-service   # or slow-site, config-change, ...
   ```
 
-Next: LlamaIndex retrieval over the runbooks, an evaluation of the agent against the baseline and
-across models, and a CrewAI comparison.
+- **Runbook retrieval** (`app/rag/runbooks.py`): the runbooks are indexed by section with
+  LlamaIndex and exposed to the investigator as a `search_runbooks` tool, so the diagnosis follows
+  the team's procedures and cites them ("[RB-007]"). BM25 by default (offline, free); OpenAI or
+  local Ollama embeddings for multilingual search. On 18 labeled queries BM25 gets 12/12 in
+  English and 3/6 in Spanish; OpenAI embeddings and the local `bge-m3` both get 18/18. See
+  [ADR 0004](docs/decisions/0004-runbook-retrieval.md).
+
+  ```bash
+  python scripts/evaluate_retrieval.py bm25 openai ollama
+  python scripts/run_agent.py --scenario config-change              # with runbooks
+  python scripts/run_agent.py --scenario config-change --no-runbooks
+  ```
+
+Next: an evaluation of the agent against the baseline (with and without runbooks, across models)
+and a CrewAI comparison.
 
 ## Limitations and next steps
 
