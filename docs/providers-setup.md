@@ -37,6 +37,8 @@ official pages linked below before budgeting.
 - Prices: https://developers.openai.com/api/docs/pricing
 - `gpt-6-luna` is the cheapest GPT-6 model and supports Structured Outputs and tool calling, which
   is all this project needs.
+- Runbook search with `RUNBOOK_RETRIEVER=openai` uses `text-embedding-3-small`; embeddings guide:
+  https://developers.openai.com/api/docs/guides/embeddings
 
 ## DeepSeek
 
@@ -76,6 +78,8 @@ official pages linked below before budgeting.
    OLLAMA_BASE_URL=http://localhost:11434
    ```
 
+- For local, multilingual runbook search (`RUNBOOK_RETRIEVER=ollama`), also pull an embedding
+  model: `ollama pull bge-m3`. Embedding models: https://ollama.com/search?c=embedding
 - Tool calling in Ollama: https://docs.ollama.com/capabilities/tool-calling
 - Its default 4,096-token context is too small for the triage prompt; the project sets
   `OLLAMA_NUM_CTX=16384`. If the agent's report comes back empty, try `OLLAMA_REASONING=false`.

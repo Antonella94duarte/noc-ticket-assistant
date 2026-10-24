@@ -13,6 +13,7 @@ from langchain_core.tools import BaseTool, tool
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.rag.runbooks import RunbookSearch
 from app.tools import network
 
 SessionFactory = Callable[[], AbstractContextManager[Session]]
@@ -85,3 +86,33 @@ def build_network_tools(session_factory: SessionFactory = SessionLocal) -> list[
             return _compact(network.find_circuits(db, query))
 
     return [get_active_alarms, get_device, get_site, find_circuits]
+
+
+def build_runbook_tool(search: RunbookSearch, top_k: int = 3) -> BaseTool:
+    """The runbook search (app/rag/runbooks.py) as a LangChain tool."""
+
+    @tool(parse_docstring=True)
+    def search_runbooks(query: str) -> str:
+        """Search the NOC runbooks (internal troubleshooting procedures) and return the most
+        relevant sections, each with its runbook ID such as "RB-002".
+
+        Use it once you know what kind of failure you are dealing with, to get the procedure
+        for it. Alarm type names work best (for example "optical_rx_los", "bundle_member_down",
+        "ac_input_failure"); queries in English match better than in other languages.
+
+        Args:
+            query: Alarm types or a short description of the failure.
+        """
+        hits = search.search(query, top_k)
+        return _compact(
+            {
+                "query": query,
+                "found": bool(hits),
+                "sections": [
+                    {"runbook": h.runbook, "title": h.title, "section": h.section, "text": h.text}
+                    for h in hits
+                ],
+            }
+        )
+
+    return search_runbooks

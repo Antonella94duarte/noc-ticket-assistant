@@ -90,3 +90,58 @@ def score(
         questions_ok=questions_ok,
         reply_ok=reply_ok,
     )
+
+
+# --- Runbook retrieval ------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RetrievalCase:
+    id: str
+    lang: str
+    style: str
+    query: str
+    expected: frozenset[str]
+
+
+@dataclass(frozen=True)
+class RetrievalResult:
+    case: RetrievalCase
+    ranked_runbooks: list[str]  # unique runbook ids, best first
+
+    @property
+    def rank(self) -> int | None:
+        """1-based position of the first expected runbook, or None if it wasn't retrieved."""
+        for position, runbook in enumerate(self.ranked_runbooks, start=1):
+            if runbook in self.case.expected:
+                return position
+        return None
+
+    def hit_at(self, k: int) -> bool:
+        return self.rank is not None and self.rank <= k
+
+    @property
+    def reciprocal_rank(self) -> float:
+        return 1 / self.rank if self.rank else 0.0
+
+
+def load_retrieval_cases(path: Path) -> list[RetrievalCase]:
+    cases = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            raw = json.loads(line)
+            cases.append(
+                RetrievalCase(
+                    id=raw["id"],
+                    lang=raw["lang"],
+                    style=raw["style"],
+                    query=raw["query"],
+                    expected=frozenset(raw["expected"]),
+                )
+            )
+    return cases
+
+
+def unique_in_order(runbooks: list[str]) -> list[str]:
+    """Several sections of one runbook count as one result at its best position."""
+    return list(dict.fromkeys(runbooks))

@@ -1,0 +1,18 @@
+{"id": "en-alarm-optical", "lang": "en", "style": "alarm", "query": "optical_rx_los RX LOS low receive power", "expected": ["RB-002"]}
+{"id": "en-alarm-link", "lang": "en", "style": "alarm", "query": "link_down backbone interface changed state to down", "expected": ["RB-001"]}
+{"id": "en-alarm-crc", "lang": "en", "style": "alarm", "query": "interface_errors CRC input errors", "expected": ["RB-003"]}
+{"id": "en-alarm-bundle", "lang": "en", "style": "alarm", "query": "bundle_member_down 1 of 2 members active", "expected": ["RB-004"]}
+{"id": "en-alarm-power", "lang": "en", "style": "alarm", "query": "ac_input_failure battery_discharge", "expected": ["RB-005"]}
+{"id": "en-alarm-psu", "lang": "en", "style": "alarm", "query": "psu_failure power supply 1 failed", "expected": ["RB-006"]}
+{"id": "en-alarm-onu", "lang": "en", "style": "alarm", "query": "onu_los ONU loss of signal", "expected": ["RB-002"]}
+{"id": "en-alarm-config", "lang": "en", "style": "alarm", "query": "config_change VLAN removed from trunk", "expected": ["RB-007"]}
+{"id": "en-alarm-utilization", "lang": "en", "style": "alarm", "query": "high_utilization uplink 92%", "expected": ["RB-009"]}
+{"id": "en-natural-flap", "lang": "en", "style": "natural", "query": "an interface keeps going up and down", "expected": ["RB-001"]}
+{"id": "en-natural-customer", "lang": "en", "style": "natural", "query": "a customer says their internet is not working at all", "expected": ["RB-008"]}
+{"id": "en-natural-rectifier", "lang": "en", "style": "natural", "query": "one rectifier failed and the other carries the whole load", "expected": ["RB-006"]}
+{"id": "es-customer", "lang": "es", "style": "natural", "query": "el cliente no tiene internet, no le anda nada", "expected": ["RB-008"]}
+{"id": "es-optical", "lang": "es", "style": "natural", "query": "potencia óptica de recepción muy baja en el transceptor", "expected": ["RB-002"]}
+{"id": "es-batteries", "lang": "es", "style": "natural", "query": "el sitio está funcionando con baterías por un corte de energía", "expected": ["RB-005"]}
+{"id": "es-vlan", "lang": "es", "style": "natural", "query": "después de un cambio se quitó una VLAN del trunk y el cliente perdió el servicio", "expected": ["RB-007"]}
+{"id": "es-congestion", "lang": "es", "style": "natural", "query": "uplink saturado y lentitud en la hora pico", "expected": ["RB-009"]}
+{"id": "es-crc", "lang": "es", "style": "natural", "query": "errores CRC en el puerto y videollamadas que se congelan", "expected": ["RB-003"]}

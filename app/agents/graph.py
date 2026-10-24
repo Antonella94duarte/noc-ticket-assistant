@@ -35,13 +35,16 @@ from app.config import Provider, Settings, get_settings
 from app.llm.prompt_builder import (
     CLASSIFY_PROMPT_VERSION,
     INVESTIGATE_PROMPT_VERSION,
+    INVESTIGATE_PROMPT_VERSION_NO_RUNBOOKS,
     REPORT_PROMPT_VERSION,
+    REPORT_PROMPT_VERSION_NO_RUNBOOKS,
     build_classify_messages,
     build_report_messages,
     format_investigation_request,
     load_system_prompt,
 )
 from app.llm.providers import create_chat_models, structured_output
+from app.rag.runbooks import get_runbook_search
 from app.schemas import (
     AgentAnalysis,
     TicketClassification,
@@ -49,11 +52,14 @@ from app.schemas import (
     TokenUsage,
     ToolCallRecord,
 )
-from app.tools.langchain_tools import build_network_tools
+from app.tools.langchain_tools import build_network_tools, build_runbook_tool
 
-AGENT_PROMPT_VERSION = (
-    f"agent:{CLASSIFY_PROMPT_VERSION}+{INVESTIGATE_PROMPT_VERSION}+{REPORT_PROMPT_VERSION}"
-)
+
+def agent_prompt_version(investigate_version: str, report_version: str) -> str:
+    return f"agent:{CLASSIFY_PROMPT_VERSION}+{investigate_version}+{report_version}"
+
+
+AGENT_PROMPT_VERSION = agent_prompt_version(INVESTIGATE_PROMPT_VERSION, REPORT_PROMPT_VERSION)
 
 
 class AgentState(TypedDict, total=False):
@@ -116,6 +122,8 @@ def build_agent_graph(
     providers: list[Provider],
     tools: list[BaseTool],
     settings: Settings | None = None,
+    investigate_version: str = INVESTIGATE_PROMPT_VERSION,
+    report_version: str = REPORT_PROMPT_VERSION,
 ) -> CompiledStateGraph:
     """`models[0]` is the primary model; the rest are fallbacks, tried in order on errors."""
     settings = settings or get_settings()
@@ -133,7 +141,7 @@ def build_agent_graph(
     investigator = create_agent(
         models[0],
         tools,
-        system_prompt=load_system_prompt(INVESTIGATE_PROMPT_VERSION),
+        system_prompt=load_system_prompt(investigate_version),
         middleware=middleware,
         name="investigator",
     )
@@ -167,6 +175,7 @@ def build_agent_graph(
             state.get("logs"),
             state["classification"],
             _investigation_text(state["findings"], tool_calls),
+            version=report_version,
         )
         return {"diagnosis": report_chain.invoke(messages)}
 
@@ -178,16 +187,27 @@ def build_agent_graph(
     graph.add_edge("triage", "investigate")
     graph.add_edge("investigate", "report")
     graph.add_edge("report", END)
-    return graph.compile(name="noc_agent")
+    compiled = graph.compile(name="noc_agent")
+    compiled.prompt_version = agent_prompt_version(investigate_version, report_version)
+    return compiled
 
 
-def build_default_graph(settings: Settings | None = None) -> CompiledStateGraph:
-    """The graph wired to the configured providers and the real network tools."""
+def build_default_graph(
+    settings: Settings | None = None, with_runbooks: bool = True
+) -> CompiledStateGraph:
+    """The graph wired to the configured providers and the real tools.
+
+    `with_runbooks=False` drops the runbook search and uses the prompts written without it, to
+    measure what retrieval adds.
+    """
     settings = settings or get_settings()
     providers = [settings.llm_provider, *settings.fallback_providers]
-    return build_agent_graph(
-        create_chat_models(settings), providers, build_network_tools(), settings
-    )
+    tools = build_network_tools()
+    versions = (INVESTIGATE_PROMPT_VERSION_NO_RUNBOOKS, REPORT_PROMPT_VERSION_NO_RUNBOOKS)
+    if with_runbooks:
+        tools.append(build_runbook_tool(get_runbook_search(), settings.runbook_top_k))
+        versions = (INVESTIGATE_PROMPT_VERSION, REPORT_PROMPT_VERSION)
+    return build_agent_graph(create_chat_models(settings), providers, tools, settings, *versions)
 
 
 def _usage(raw: dict) -> TokenUsage:
@@ -224,7 +244,7 @@ def run_agent_analysis(
             len(tool_calls) > settings.agent_max_tool_calls
             or model_calls >= settings.agent_max_model_calls
         ),
-        prompt_version=AGENT_PROMPT_VERSION,
+        prompt_version=getattr(graph, "prompt_version", AGENT_PROMPT_VERSION),
         usage_by_model={model: _usage(raw) for model, raw in usage.usage_metadata.items()},
         latency_seconds=round(latency, 2),
     )

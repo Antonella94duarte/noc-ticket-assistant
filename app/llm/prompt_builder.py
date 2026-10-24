@@ -15,8 +15,11 @@ from app.schemas import TicketClassification
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 CLASSIFY_PROMPT_VERSION = "classify_v3"
 DIAGNOSE_PROMPT_VERSION = "diagnose_v2"
-INVESTIGATE_PROMPT_VERSION = "investigate_v1"
-REPORT_PROMPT_VERSION = "report_v1"
+# Agent prompts: v2 adds runbook retrieval; v1 is kept to compare the agent without it.
+INVESTIGATE_PROMPT_VERSION = "investigate_v2"
+REPORT_PROMPT_VERSION = "report_v2"
+INVESTIGATE_PROMPT_VERSION_NO_RUNBOOKS = "investigate_v1"
+REPORT_PROMPT_VERSION_NO_RUNBOOKS = "report_v1"
 
 # Matches our delimiter tags, so text inside the ticket can't close them and smuggle instructions
 # outside the data block.
