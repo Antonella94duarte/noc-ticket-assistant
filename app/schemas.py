@@ -157,6 +157,15 @@ class TicketPage(BaseModel):
 # --- Agent analysis (app/agents) ---
 
 
+class AgentReport(TicketDiagnosis):
+    """The agent's diagnosis plus a severity re-assessed with the investigation's evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Severity = Field(description="Severity re-assessed with the evidence.")
+    severity_reason: str = Field(description="One sentence citing the evidence for the severity.")
+
+
 class ToolCallRecord(BaseModel):
     name: str
     args: dict
@@ -166,12 +175,22 @@ class ToolCallRecord(BaseModel):
 class AgentAnalysis(BaseModel):
     classification: TicketClassification
     findings: str = Field(description="The investigator's summary of what it checked and found.")
-    diagnosis: TicketDiagnosis
+    diagnosis: AgentReport
     tool_calls: list[ToolCallRecord]
     investigation_model_calls: int
     limit_reached: bool = Field(
         description="True when the investigator hit its tool or model call limit."
     )
+    prompt_version: str
+    usage_by_model: dict[str, TokenUsage]
+    latency_seconds: float
+
+
+class BaselineAnalysis(BaseModel):
+    """The chained baseline (classify, then diagnose; no tools) run through LangChain models."""
+
+    classification: TicketClassification
+    diagnosis: TicketDiagnosis
     prompt_version: str
     usage_by_model: dict[str, TokenUsage]
     latency_seconds: float

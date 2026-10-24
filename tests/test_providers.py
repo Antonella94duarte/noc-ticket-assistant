@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, SystemMessage
@@ -11,6 +13,7 @@ from app.llm.providers import (
     ProviderNotConfiguredError,
     create_chat_model,
     create_chat_models,
+    drop_unknown_keys,
     schema_instruction,
     structured_output,
     structured_output_method,
@@ -18,6 +21,7 @@ from app.llm.providers import (
     with_instruction,
 )
 from app.schemas import TicketClassification
+from tests.conftest import SAMPLE_CLASSIFICATION
 
 
 def settings(**overrides) -> Settings:
@@ -182,3 +186,49 @@ def test_deepseek_reasoning_effort_and_ollama_context_are_passed_through():
 
     assert deepseek.reasoning_effort == "low"
     assert ollama.num_ctx == 8192
+
+
+def test_drop_unknown_keys_at_every_level():
+    data = {
+        **SAMPLE_CLASSIFICATION,
+        "type": "json_object",
+        "entities": {**SAMPLE_CLASSIFICATION["entities"], "vendor": "Cisco"},
+    }
+
+    cleaned = drop_unknown_keys(data, TicketClassification)
+
+    assert "type" not in cleaned and "vendor" not in cleaned["entities"]
+    TicketClassification.model_validate(cleaned)
+
+
+def deepseek_json_reply(payload: dict) -> list:
+    return [AIMessage(content=json.dumps(payload))]
+
+
+def test_json_mode_tolerates_extra_keys_but_not_missing_ones():
+    config = settings(deepseek_thinking=None)
+    extra = {**SAMPLE_CLASSIFICATION, "type": "json_object"}
+    missing = {k: v for k, v in SAMPLE_CLASSIFICATION.items() if k != "severity"}
+
+    ok = structured_output(
+        GenericFakeChatModel(messages=iter(deepseek_json_reply(extra))),
+        TicketClassification,
+        "deepseek",
+        config,
+    ).invoke("Clasificá el ticket")
+    raw = structured_output(
+        GenericFakeChatModel(messages=iter(deepseek_json_reply(missing))),
+        TicketClassification,
+        "deepseek",
+        config,
+        include_raw=True,
+    ).invoke("Clasificá el ticket")
+
+    assert ok.category.value == "connectivity_loss"
+    assert raw["parsed"] is None and raw["parsing_error"] is not None
+
+
+def test_deepseek_has_its_own_token_cap():
+    model = create_chat_model("deepseek", settings(deepseek_max_tokens=9000))
+
+    assert model.max_tokens == 9000

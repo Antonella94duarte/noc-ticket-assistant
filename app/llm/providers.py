@@ -17,12 +17,19 @@ API directly.
 """
 
 import json
+import typing
 from typing import Literal
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, convert_to_messages
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    convert_to_messages,
+)
 from langchain_core.runnables import Runnable, RunnableLambda
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.config import Provider, Settings, get_settings
 from app.llm.client import LLMNotConfiguredError
@@ -72,7 +79,7 @@ def create_chat_model(
             api_key=settings.deepseek_api_key.get_secret_value(),
             api_base=settings.deepseek_base_url,
             temperature=settings.llm_temperature,
-            max_tokens=settings.llm_max_tokens,
+            max_tokens=settings.deepseek_max_tokens,
             timeout=settings.openai_timeout_seconds,
             max_retries=MAX_RETRIES,
             reasoning_effort=settings.deepseek_reasoning_effort,
@@ -147,6 +154,58 @@ def with_instruction(instruction: BaseMessage, model_input) -> list[BaseMessage]
     return [instruction, *messages]
 
 
+def _nested_model(annotation) -> type[BaseModel] | None:
+    """The Pydantic model inside `Model`, `Model | None` or `list[Model]`, if any."""
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return annotation
+    for arg in typing.get_args(annotation):
+        found = _nested_model(arg)
+        if found:
+            return found
+    return None
+
+
+def drop_unknown_keys(data, schema: type[BaseModel]):
+    """Remove keys the schema doesn't define, at every level.
+
+    JSON mode guarantees valid JSON but not its shape, and models sometimes add a key of their
+    own (DeepSeek once added "type": "json_object"). Required keys are still enforced by the
+    schema afterwards; only the extras are dropped.
+    """
+    if isinstance(data, list):
+        return [drop_unknown_keys(item, schema) for item in data]
+    if not isinstance(data, dict):
+        return data
+    cleaned = {}
+    for key, value in data.items():
+        field = schema.model_fields.get(key)
+        if field is None:
+            continue
+        nested = _nested_model(field.annotation)
+        cleaned[key] = drop_unknown_keys(value, nested) if nested else value
+    return cleaned
+
+
+def _json_mode(model: BaseChatModel, schema: type[BaseModel], include_raw: bool) -> Runnable:
+    instruction = schema_instruction(schema)
+    bound = model.bind(response_format={"type": "json_object"})
+
+    def parse(message: AIMessage):
+        try:
+            parsed = schema.model_validate(drop_unknown_keys(json.loads(message.text), schema))
+        except (ValueError, ValidationError) as exc:
+            if not include_raw:
+                raise
+            return {"raw": message, "parsed": None, "parsing_error": exc}
+        return {"raw": message, "parsed": parsed, "parsing_error": None} if include_raw else parsed
+
+    return (
+        RunnableLambda(lambda model_input: with_instruction(instruction, model_input))
+        | bound
+        | RunnableLambda(parse)
+    )
+
+
 def structured_output(
     model: BaseChatModel,
     schema: type[BaseModel],
@@ -159,11 +218,21 @@ def structured_output(
     provider = provider or settings.llm_provider
     method = structured_output_method(provider, settings)
     if method == "json_mode":
-        instruction = schema_instruction(schema)
-        add_schema = RunnableLambda(lambda model_input: with_instruction(instruction, model_input))
-        return add_schema | model.with_structured_output(
-            schema, method="json_mode", include_raw=include_raw
-        )
+        return _json_mode(model, schema, include_raw)
     # OpenAI enforces the schema server-side when asked to; others are validated by Pydantic.
     strict = {"strict": True} if provider == "openai" else {}
     return model.with_structured_output(schema, method=method, include_raw=include_raw, **strict)
+
+
+def structured_with_fallbacks(
+    models: list[BaseChatModel],
+    providers: list[Provider],
+    schema: type[BaseModel],
+    settings: Settings,
+) -> Runnable:
+    """One structured-output runnable per model (each with its provider's method), in order."""
+    primary, *fallbacks = [
+        structured_output(model, schema, provider, settings)
+        for model, provider in zip(models, providers, strict=True)
+    ]
+    return primary.with_fallbacks(fallbacks) if fallbacks else primary

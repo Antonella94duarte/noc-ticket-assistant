@@ -51,6 +51,7 @@ official pages linked below before budgeting.
    DEEPSEEK_API_KEY=sk-...
    DEEPSEEK_MODEL=deepseek-flash
    DEEPSEEK_REASONING_EFFORT=low
+   DEEPSEEK_MAX_TOKENS=16000
    ```
 
 - Models and prices (cheaper off-peak; cached input costs almost nothing):
