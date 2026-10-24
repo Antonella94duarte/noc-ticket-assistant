@@ -174,3 +174,11 @@ def test_structured_output_for_deepseek_thinking_adds_the_schema_step():
     )
 
     assert isinstance(runnable.first, RunnableLambda)
+
+
+def test_deepseek_reasoning_effort_and_ollama_context_are_passed_through():
+    deepseek = create_chat_model("deepseek", settings(deepseek_reasoning_effort="low"))
+    ollama = create_chat_model("ollama", settings(ollama_num_ctx=8192))
+
+    assert deepseek.reasoning_effort == "low"
+    assert ollama.num_ctx == 8192
