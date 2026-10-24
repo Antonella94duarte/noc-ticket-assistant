@@ -6,3 +6,7 @@ sqlalchemy>=2.0,<2.1
 psycopg[binary]>=3.2,<4.0
 openai>=3.36,<4.0
 alembic>=1.13,<2.0
+langchain>=1.4,<2.0
+langchain-openai>=1.7,<2.0
+langchain-deepseek>=1.1,<2.0
+langchain-ollama>=1.1,<2.0

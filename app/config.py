@@ -7,6 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Values accepted by the OpenAI SDK; each model supports a subset (see its page in the docs).
 ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
+Provider = Literal["openai", "deepseek", "ollama"]
+PROVIDERS: tuple[Provider, ...] = ("openai", "deepseek", "ollama")
+
 
 class Settings(BaseSettings):
     """Application settings, read from environment variables or a .env file."""
@@ -27,6 +30,39 @@ class Settings(BaseSettings):
     openai_reasoning_effort: ReasoningEffort = "medium"
     # Per request; the SDK retries twice, and each analysis makes two chained calls.
     openai_timeout_seconds: float = 60.0
+
+    # --- Agents (app/llm/providers.py): any provider, chosen here ---
+    llm_provider: Provider = "openai"
+    # Comma-separated, tried in order when the primary provider fails: "deepseek,ollama".
+    llm_fallback_providers: str = ""
+    # Applied to providers that accept it (not to OpenAI reasoning models).
+    llm_temperature: float = 0.0
+    # Cost cap per model call; reasoning models count their hidden reasoning against it.
+    llm_max_tokens: int = 4000
+
+    deepseek_api_key: SecretStr | None = None
+    deepseek_model: str = "deepseek-flash"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    # DeepSeek thinks by default (None keeps that). Thinking mode ignores temperature and can't
+    # force a tool call, so structured output then uses JSON mode (see app/llm/providers.py).
+    deepseek_thinking: bool | None = None
+
+    # From inside Docker the host's Ollama is http://host.docker.internal:11434.
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen3:4b"
+    # Thinking models such as qwen3 reason before answering by default (None keeps the model's
+    # default). False is much faster on a laptop GPU, at some cost in accuracy.
+    ollama_reasoning: bool | None = None
+
+    @property
+    def fallback_providers(self) -> list[Provider]:
+        names = [name.strip().lower() for name in self.llm_fallback_providers.split(",")]
+        unknown = [name for name in names if name and name not in PROVIDERS]
+        if unknown:
+            raise ValueError(f"Unknown LLM fallback provider(s): {', '.join(unknown)}")
+        # Keep the order, drop duplicates and the primary itself.
+        ordered = dict.fromkeys(name for name in names if name and name != self.llm_provider)
+        return list(ordered)
 
 
 @lru_cache
