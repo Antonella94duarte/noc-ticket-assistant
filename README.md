@@ -329,11 +329,16 @@ Done so far:
   lookups use partial indexes.
 - **Runbooks** (`data/runbooks/`): nine synthetic procedures (link down, optical power, CRC
   errors, bundle members, power, PSU/rectifier, configuration rollback, customer without service,
-  congestion) for retrieval in the next phase.
+  congestion) for retrieval in a later phase.
+- **Provider-agnostic models** (`app/llm/providers.py`): OpenAI, DeepSeek or a local model
+  through Ollama, chosen with `LLM_PROVIDER`, with `LLM_FALLBACK_PROVIDERS` tried in order when
+  the primary fails. The network tools are exposed as LangChain tools
+  (`app/tools/langchain_tools.py`). See [ADR 0002](docs/decisions/0002-provider-agnostic-llm-layer.md).
+  `python scripts/check_providers.py` checks each provider's tool calling and structured output
+  with real calls.
 
-Next: a provider-agnostic LLM layer (OpenAI, DeepSeek, Ollama) with fallback, LangGraph agents,
-LlamaIndex retrieval over the runbooks, a CrewAI comparison and an evaluation of agents vs the
-baseline and across models.
+Next: LangGraph agents, LlamaIndex retrieval over the runbooks, a CrewAI comparison and an
+evaluation of agents vs the baseline and across models.
 
 ## Limitations and next steps
 
