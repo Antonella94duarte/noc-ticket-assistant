@@ -6,8 +6,9 @@
 - investigate: a tool-calling agent (LangChain `create_agent`) that queries alarms, topology and
   circuits. Middleware limits its tool and model calls and switches to the fallback models when
   the primary provider fails.
-- report: a structured diagnosis (same TicketDiagnosis schema as the baseline, so both can be
-  compared) grounded on the investigation's findings and raw tool results.
+- report: a structured diagnosis grounded on the investigation's findings and raw tool results:
+  the baseline's TicketDiagnosis fields (so both can be compared) plus a severity re-assessed
+  with the evidence (AgentReport).
 
 The graph only depends on LangChain chat models and tools, so any provider and the fake models
 used in tests plug in the same way.
@@ -25,11 +26,9 @@ from langchain.agents.middleware import (
 from langchain_core.callbacks import BaseCallbackHandler, get_usage_metadata_callback
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
-from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import BaseModel
 
 from app.config import Provider, Settings, get_settings
 from app.llm.prompt_builder import (
@@ -43,12 +42,12 @@ from app.llm.prompt_builder import (
     format_investigation_request,
     load_system_prompt,
 )
-from app.llm.providers import create_chat_models, structured_output
+from app.llm.providers import create_chat_models, structured_with_fallbacks
 from app.rag.runbooks import get_runbook_search
 from app.schemas import (
     AgentAnalysis,
+    AgentReport,
     TicketClassification,
-    TicketDiagnosis,
     TokenUsage,
     ToolCallRecord,
 )
@@ -69,7 +68,7 @@ class AgentState(TypedDict, total=False):
     investigation_messages: list[BaseMessage]
     investigation_model_calls: int
     findings: str
-    diagnosis: TicketDiagnosis
+    diagnosis: AgentReport
 
 
 class _ModelCallCounter(BaseCallbackHandler):
@@ -81,20 +80,6 @@ class _ModelCallCounter(BaseCallbackHandler):
 
     def on_chat_model_start(self, *args, **kwargs) -> None:
         self.calls += 1
-
-
-def _structured_with_fallbacks(
-    models: list[BaseChatModel],
-    providers: list[Provider],
-    schema: type[BaseModel],
-    settings: Settings,
-) -> Runnable:
-    """One structured-output runnable per model (each with its provider's method), in order."""
-    primary, *fallbacks = [
-        structured_output(model, schema, provider, settings)
-        for model, provider in zip(models, providers, strict=True)
-    ]
-    return primary.with_fallbacks(fallbacks) if fallbacks else primary
 
 
 def _tool_results(messages: list[BaseMessage]) -> list[ToolCallRecord]:
@@ -127,8 +112,8 @@ def build_agent_graph(
 ) -> CompiledStateGraph:
     """`models[0]` is the primary model; the rest are fallbacks, tried in order on errors."""
     settings = settings or get_settings()
-    triage_chain = _structured_with_fallbacks(models, providers, TicketClassification, settings)
-    report_chain = _structured_with_fallbacks(models, providers, TicketDiagnosis, settings)
+    triage_chain = structured_with_fallbacks(models, providers, TicketClassification, settings)
+    report_chain = structured_with_fallbacks(models, providers, AgentReport, settings)
 
     middleware = [
         # Past the tool limit the agent can't call tools anymore and has to conclude.
@@ -210,7 +195,8 @@ def build_default_graph(
     return build_agent_graph(create_chat_models(settings), providers, tools, settings, *versions)
 
 
-def _usage(raw: dict) -> TokenUsage:
+def token_usage(raw: dict) -> TokenUsage:
+    """TokenUsage from one entry of LangChain's usage-metadata callback."""
     details = raw.get("output_token_details") or {}
     return TokenUsage(
         input_tokens=raw.get("input_tokens", 0),
@@ -245,6 +231,6 @@ def run_agent_analysis(
             or model_calls >= settings.agent_max_model_calls
         ),
         prompt_version=getattr(graph, "prompt_version", AGENT_PROMPT_VERSION),
-        usage_by_model={model: _usage(raw) for model, raw in usage.usage_metadata.items()},
+        usage_by_model={m: token_usage(raw) for m, raw in usage.usage_metadata.items()},
         latency_seconds=round(latency, 2),
     )

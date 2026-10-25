@@ -10,9 +10,9 @@ from langchain_core.runnables import RunnableLambda
 from app.agents.graph import AGENT_PROMPT_VERSION, build_agent_graph, run_agent_analysis
 from app.config import Settings
 from app.db.seed import load_network_seed
-from app.schemas import TicketClassification, TicketDiagnosis
+from app.schemas import AgentReport, TicketClassification
 from app.tools.langchain_tools import build_network_tools
-from tests.conftest import SAMPLE_CLASSIFICATION, SAMPLE_DIAGNOSIS
+from tests.conftest import SAMPLE_AGENT_REPORT, SAMPLE_CLASSIFICATION
 
 TICKET = "Desde las 07:45 el cliente Distribuidora Del Sur no tiene internet."
 
@@ -59,7 +59,7 @@ def scripted(turns) -> ScriptedModel:
         messages=iter(turns),
         structured={
             TicketClassification: TicketClassification.model_validate(SAMPLE_CLASSIFICATION),
-            TicketDiagnosis: TicketDiagnosis.model_validate(SAMPLE_DIAGNOSIS),
+            AgentReport: AgentReport.model_validate(SAMPLE_AGENT_REPORT),
         },
         structured_inputs=[],
     )
@@ -114,7 +114,7 @@ def test_report_receives_findings_and_raw_tool_results(tools):
     run([model], tools)
 
     (schema, report_messages) = model.structured_inputs[-1]
-    assert schema is TicketDiagnosis
+    assert schema is AgentReport
     request = report_messages[-1]["content"]
     assert "<investigation>\nHallazgo: puerto Gi0/0/3 caído." in request
     assert '"circuit_id":"SUR-2210"' in request
@@ -174,3 +174,15 @@ def test_fallback_model_takes_over_when_the_primary_fails(tools):
     assert analysis.findings == "Hallazgos del modelo de respaldo."
     assert [c.name for c in analysis.tool_calls] == ["get_site"]
     assert analysis.classification.category.value == "connectivity_loss"
+
+
+def test_report_re_assesses_the_severity(tools):
+    model = scripted([AIMessage(content="Alarma 11 en Gi0/0/3.")])
+    model.structured[TicketClassification] = TicketClassification.model_validate(
+        {**SAMPLE_CLASSIFICATION, "severity": "minor"}
+    )
+
+    analysis = run([model], tools)
+
+    assert analysis.classification.severity.value == "minor"  # from the ticket alone
+    assert analysis.diagnosis.severity.value == "major"  # after the investigation

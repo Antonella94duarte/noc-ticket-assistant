@@ -114,4 +114,4 @@ def test_default_graph_with_and_without_runbooks():
 
     assert with_runbooks.prompt_version == AGENT_PROMPT_VERSION
     assert "investigate_v2" in with_runbooks.prompt_version
-    assert without.prompt_version == agent_prompt_version("investigate_v1", "report_v1")
+    assert without.prompt_version == agent_prompt_version("investigate_v1", "report_v3")

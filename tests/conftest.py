@@ -51,6 +51,12 @@ SAMPLE_DIAGNOSIS = {
     "customer_reply": "Estamos trabajando en la falla que afecta su servicio.",
 }
 
+SAMPLE_AGENT_REPORT = {
+    **SAMPLE_DIAGNOSIS,
+    "severity": "major",
+    "severity_reason": "One customer is down: alarm 11 on its access port.",
+}
+
 
 class FakeLLM:
     """Stands in for the real client: returns a canned answer per output schema and records the

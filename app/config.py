@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Thinking effort ("high" is DeepSeek's own default). At "high" the long report prompt spent
     # the whole LLM_MAX_TOKENS budget on reasoning and returned no answer, so we default to low.
     deepseek_reasoning_effort: Literal["low", "high", "max"] | None = "low"
+    # Its own cap because DeepSeek's thinking alone often took 3-4k tokens, so LLM_MAX_TOKENS
+    # (4000) cut off the answer. Output is cheap: 16k tokens cost about US$0.02 at peak price.
+    deepseek_max_tokens: int = 16000
 
     # From inside Docker the host's Ollama is http://host.docker.internal:11434.
     ollama_base_url: str = "http://localhost:11434"

@@ -362,8 +362,23 @@ Done so far:
   python scripts/run_agent.py --scenario config-change --no-runbooks
   ```
 
-Next: an evaluation of the agent against the baseline (with and without runbooks, across models)
-and a CrewAI comparison.
+- **Evaluation of agent vs baseline across models** (`scripts/evaluate_agents.py`): 30 labeled
+  tickets about the synthetic network, three systems (baseline, agent, agent with runbooks) on
+  OpenAI, DeepSeek and a local model. The agent's report now re-assesses the severity with the
+  evidence. Full write-up: [docs/model-comparison.md](docs/model-comparison.md).
+
+  | OpenAI `gpt-6-luna` | Root cause found | Final severity | Latency | Cost/ticket |
+  |---|---|---|---|---|
+  | baseline | 1/23 | 23/30 | 17 s | $0.0013 |
+  | agent | 21/23 | 26/30 | 46 s | $0.0029 |
+  | agent + runbooks | 20/23 | 27/30 | 58 s | $0.0036 |
+
+  Investigating is what finds the cause; DeepSeek reaches the same accuracy (20/23) slightly
+  faster once configured, and the local 4B model finds the evidence but misjudges severity. The
+  agent's main failure mode is blaming the loudest alarm nearby instead of the customer's own
+  port.
+
+Next: a CrewAI version of the agent to compare frameworks, and the presentation.
 
 ## Limitations and next steps
 
