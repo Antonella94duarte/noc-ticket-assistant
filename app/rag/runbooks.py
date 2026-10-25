@@ -32,7 +32,7 @@ from app.config import Settings, get_settings
 RUNBOOKS_DIR = Path(__file__).resolve().parents[2] / "data" / "runbooks"
 MAX_SECTION_CHARS = 900
 
-RetrieverKind = Literal["bm25", "openai", "ollama"]
+RetrieverKind = Literal["bm25", "openai", "ollama", "hf"]
 
 
 @dataclass(frozen=True)
@@ -127,6 +127,18 @@ def create_embed_model(kind: RetrieverKind, settings: Settings) -> BaseEmbedding
 
         return OllamaEmbedding(
             model_name=settings.ollama_embedding_model, base_url=settings.ollama_base_url
+        )
+    if kind == "hf":
+        from llama_index.embeddings.huggingface import HuggingFaceEmbedding  # requirements-hf.txt
+
+        model = settings.hf_embedding_model
+        # E5 models were trained with these prefixes and retrieve worse without them.
+        e5 = "e5" in model.lower()
+        return HuggingFaceEmbedding(
+            model_name=model,
+            query_instruction="query: " if e5 else None,
+            text_instruction="passage: " if e5 else None,
+            device="cpu",
         )
     raise ValueError(f"No embedding model for retriever {kind!r}")
 

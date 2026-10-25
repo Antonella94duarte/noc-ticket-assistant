@@ -39,7 +39,8 @@ any of that: it can only guess.
 
 Investigating is what finds the cause, for about a third of a cent per ticket. DeepSeek reaches
 the same accuracy (20/23); a 4B model running locally finds the evidence but misjudges severity.
-The same agent built with CrewAI gives the same quality at about 3x the cost. The agent's main
+The same agent built with CrewAI gives the same quality at about 3x the cost, and small Hugging
+Face models can't replace the LLM for triage, though a 118M one handles runbook search. The agent's main
 weakness: sometimes it blames the loudest alarm nearby instead of the customer's own port.
 
 ## Try it
@@ -95,7 +96,8 @@ flowchart LR
   of any framework, returning compact results, capped lists and name suggestions when the model
   misspells a hostname. LangGraph and CrewAI wrap the same functions.
 - **Runbook search** (`app/rag/runbooks.py`) indexes the procedures by section with LlamaIndex:
-  BM25 by default (offline, free), or OpenAI / local `bge-m3` embeddings for multilingual queries.
+  BM25 by default (offline, free), or embeddings for multilingual queries: OpenAI, `bge-m3` through
+  Ollama, or a Hugging Face model in the API process.
 - **Providers** are chosen with `LLM_PROVIDER`, with `LLM_FALLBACK_PROVIDERS` tried in order. Each
   needs a different way to get structured output (strict JSON schema, JSON mode, function calling),
   handled in one place.
@@ -111,9 +113,10 @@ flowchart LR
 | OpenAI vs DeepSeek vs a local model? | OpenAI cheapest per ticket; DeepSeek as accurate but ~4x the cost here; `qwen3:4b` free and private, finds evidence, misjudges severity, ~2 min per ticket | [model-comparison.md](docs/model-comparison.md) |
 | LangGraph or CrewAI? | Same quality; CrewAI makes ~21 model calls instead of ~6 (3x the cost) and its structured output fails on DeepSeek. LangGraph stays | [framework-comparison.md](docs/framework-comparison.md) |
 | BM25 or embeddings for runbooks? | BM25 12/12 in English, 3/6 in Spanish; embeddings 18/18 | [ADR 0004](docs/decisions/0004-runbook-retrieval.md) |
+| Can small Hugging Face models replace the LLM? | Not for triage: zero-shot gets 30/53 categories, barely above always answering the most common one (27/53), vs 53/53 for the LLM. Yes for runbook search: a 118M embedding model on a CPU gets 18/18 | [small-models-comparison.md](docs/small-models-comparison.md) |
 
 Everything is reproducible with the scripts in `scripts/` (`evaluate_agents.py`,
-`evaluate_retrieval.py`, `evaluate.py`); raw results, including every diagnosis, are in
+`evaluate_retrieval.py`, `evaluate_small_models.py`, `evaluate.py`); raw results, including every diagnosis, are in
 `data/eval/results/`.
 
 ## Design decisions
@@ -125,6 +128,7 @@ Everything is reproducible with the scripts in `scripts/` (`evaluate_agents.py`,
 | [0003](docs/decisions/0003-langgraph-investigation-agent.md) | A three-step LangGraph graph with one tool-using investigator |
 | [0004](docs/decisions/0004-runbook-retrieval.md) | Runbook retrieval by section, BM25 by default |
 | [0005](docs/decisions/0005-langgraph-over-crewai.md) | Keep LangGraph; CrewAI as a documented comparison |
+| [0006](docs/decisions/0006-small-models.md) | Keep the LLM for triage; allow a local Hugging Face model for runbook search |
 
 ## API
 
@@ -165,6 +169,7 @@ The pipeline endpoints, its prompt engineering, data model and prompt evaluation
 | LangGraph 1.2, LangChain 1.4 | Agent graph, tool-calling loop, call limits, provider fallback |
 | LlamaIndex 0.14 | Runbook indexing and retrieval (BM25, embeddings) |
 | CrewAI 1.15 | Framework comparison, in its own image (`requirements-crewai.txt`) |
+| Hugging Face Hub, transformers, sentence-transformers | Model search through the Hub API, zero-shot triage and local embeddings, in their own image (`requirements-hf.txt`) |
 | OpenAI, DeepSeek, Ollama | Model providers (`gpt-6-luna`, `deepseek-flash`, `qwen3:4b`, `bge-m3`) |
 | PostgreSQL 16, SQLAlchemy 2, Alembic | Network data, stored analyses (JSONB), migrations |
 | pytest, ruff, GitHub Actions, Docker Compose | Tests against a real database, lint, CI, local stack |
@@ -209,7 +214,7 @@ The main variables; every one is documented in [.env.example](.env.example).
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | (unset), `gpt-6-luna` in the example | Also used by the pipeline |
 | `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | (unset), `deepseek-flash` | |
 | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | `http://localhost:11434`, `qwen3:4b` | From Docker: `http://host.docker.internal:11434` |
-| `RUNBOOK_RETRIEVER` | `bm25` | `bm25`, `openai` or `ollama` embeddings |
+| `RUNBOOK_RETRIEVER` | `bm25` | `bm25`, or `openai`, `ollama` or `hf` (in-process Hugging Face) embeddings |
 | `AGENT_MAX_TOOL_CALLS`, `AGENT_MAX_MODEL_CALLS` | `8`, `6` | Limits per investigation |
 
 ## Local development
@@ -230,6 +235,7 @@ app/
 ├── agents/graph.py       # LangGraph agent: triage -> investigate -> report, streamed
 ├── agents/baseline.py    # the pipeline as a comparable system for the evaluation
 ├── crew/noc_crew.py      # the same agent with CrewAI (optional image)
+├── small_models/         # zero-shot triage with Hugging Face models (optional image)
 ├── tools/                # network lookups and their LangChain wrappers
 ├── rag/runbooks.py       # runbook index and search (LlamaIndex)
 ├── llm/                  # providers, versioned prompts, pricing
