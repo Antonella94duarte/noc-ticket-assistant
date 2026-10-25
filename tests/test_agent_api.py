@@ -23,13 +23,13 @@ def settings(**overrides) -> Settings:
 
 
 @pytest.fixture
-def agent_client(client, db_session):
+def agent_client(client, db_session, monkeypatch):
     load_network_seed(db_session)
     tools = build_network_tools(lambda: nullcontext(db_session))
 
     def use(model):
         graph = build_agent_graph([model], ["openai"], tools, settings())
-        client.app.dependency_overrides[agent_service.get_agent_graph] = lambda: graph
+        monkeypatch.setattr(agent_service, "get_agent_graph", lambda: graph)
         client.app.dependency_overrides[agent_service.get_settings] = lambda: settings()
         return client
 
@@ -101,19 +101,24 @@ def test_a_failure_mid_run_ends_the_stream_with_an_error_event(agent_client):
     assert "provider unavailable" not in response.text
 
 
-def test_agent_needs_a_configured_provider(client, monkeypatch):
+@pytest.fixture
+def no_provider(monkeypatch):
+    """No key for the provider, as in CI."""
     agent_service.get_agent_graph.cache_clear()
     monkeypatch.setattr(
         agent_service, "get_settings", lambda: Settings(_env_file=None, openai_api_key=None)
     )
-
-    response = client.post("/api/v1/agent/analyze", json=TICKET)
-
-    assert response.status_code == 503
+    yield
     agent_service.get_agent_graph.cache_clear()
 
 
-def test_agent_validates_the_ticket(client):
+def test_agent_needs_a_configured_provider(client, no_provider):
+    response = client.post("/api/v1/agent/analyze", json=TICKET)
+
+    assert response.status_code == 503
+
+
+def test_agent_validates_the_ticket_before_needing_a_provider(client, no_provider):
     response = client.post("/api/v1/agent/analyze", json={"ticket_text": "short"})
 
     assert response.status_code == 422

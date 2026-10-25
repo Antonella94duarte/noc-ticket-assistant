@@ -3,7 +3,6 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
-from langgraph.graph.state import CompiledStateGraph
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -119,7 +118,6 @@ def list_tickets(
 )
 def analyze_with_agent(
     request: TicketAnalyzeRequest,
-    graph: CompiledStateGraph = Depends(agent_service.get_agent_graph),
     settings: Settings = Depends(get_settings),
 ) -> StreamingResponse:
     """Investigate a ticket with the LangGraph agent and stream what it does.
@@ -130,6 +128,9 @@ def analyze_with_agent(
     calls, tokens, latency and an estimated cost). A failure after the stream started arrives as
     an `error` event. Agent runs are not stored.
     """
+    # Built here rather than as a dependency: FastAPI resolves dependencies before it reports
+    # validation errors, so a missing provider key (503) would hide an invalid ticket (422).
+    graph = agent_service.get_agent_graph()
     return StreamingResponse(
         agent_service.trace_lines(graph, request.ticket_text, request.logs, settings),
         media_type="application/x-ndjson",
