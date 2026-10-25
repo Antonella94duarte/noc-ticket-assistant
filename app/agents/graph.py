@@ -15,6 +15,7 @@ used in tests plug in the same way.
 """
 
 import time
+from collections.abc import Iterator
 from typing import TypedDict
 
 from langchain.agents import create_agent
@@ -206,31 +207,85 @@ def token_usage(raw: dict) -> TokenUsage:
     )
 
 
+def _investigator_events(update: dict) -> Iterator[dict]:
+    """The tool calls and results in one step of the investigator's loop."""
+    for values in update.values():
+        for message in (values or {}).get("messages", []):
+            if isinstance(message, AIMessage):
+                for call in message.tool_calls:
+                    yield {
+                        "type": "tool_call",
+                        "id": call["id"],
+                        "name": call["name"],
+                        "args": call["args"],
+                    }
+            elif isinstance(message, ToolMessage):
+                yield {
+                    "type": "tool_result",
+                    "id": message.tool_call_id,
+                    "name": message.name,
+                    "result": message.text,
+                }
+
+
+def stream_agent_analysis(
+    graph: CompiledStateGraph,
+    ticket_text: str,
+    logs: str | None = None,
+    settings: Settings | None = None,
+) -> Iterator[dict]:
+    """Run the graph and yield each step as it finishes, ending with the whole analysis.
+
+    Events, in order: `triage` (classification), `tool_call` and `tool_result` for each tool the
+    investigator uses, `findings`, `report` (diagnosis) and `analysis` (an AgentAnalysis).
+    Consume it in a single thread: token usage is collected through a context variable.
+    """
+    settings = settings or get_settings()
+    state: AgentState = {}
+    with get_usage_metadata_callback() as usage:
+        start = time.perf_counter()
+        for namespace, update in graph.stream(
+            {"ticket_text": ticket_text, "logs": logs}, stream_mode="updates", subgraphs=True
+        ):
+            if namespace:  # a step inside the investigator agent
+                yield from _investigator_events(update)
+                continue
+            for node, values in update.items():
+                state.update(values)
+                if node == "triage":
+                    yield {"type": "triage", "classification": values["classification"]}
+                elif node == "investigate":
+                    yield {"type": "findings", "text": values["findings"]}
+                elif node == "report":
+                    yield {"type": "report", "diagnosis": values["diagnosis"]}
+        latency = time.perf_counter() - start
+
+    tool_calls = _tool_results(state["investigation_messages"])
+    model_calls = state["investigation_model_calls"]
+    yield {
+        "type": "analysis",
+        "analysis": AgentAnalysis(
+            classification=state["classification"],
+            findings=state["findings"],
+            diagnosis=state["diagnosis"],
+            tool_calls=tool_calls,
+            investigation_model_calls=model_calls,
+            limit_reached=(
+                len(tool_calls) > settings.agent_max_tool_calls
+                or model_calls >= settings.agent_max_model_calls
+            ),
+            prompt_version=getattr(graph, "prompt_version", AGENT_PROMPT_VERSION),
+            usage_by_model={m: token_usage(raw) for m, raw in usage.usage_metadata.items()},
+            latency_seconds=round(latency, 2),
+        ),
+    }
+
+
 def run_agent_analysis(
     graph: CompiledStateGraph,
     ticket_text: str,
     logs: str | None = None,
     settings: Settings | None = None,
 ) -> AgentAnalysis:
-    settings = settings or get_settings()
-    with get_usage_metadata_callback() as usage:
-        start = time.perf_counter()
-        state = graph.invoke({"ticket_text": ticket_text, "logs": logs})
-        latency = time.perf_counter() - start
-
-    tool_calls = _tool_results(state["investigation_messages"])
-    model_calls = state["investigation_model_calls"]
-    return AgentAnalysis(
-        classification=state["classification"],
-        findings=state["findings"],
-        diagnosis=state["diagnosis"],
-        tool_calls=tool_calls,
-        investigation_model_calls=model_calls,
-        limit_reached=(
-            len(tool_calls) > settings.agent_max_tool_calls
-            or model_calls >= settings.agent_max_model_calls
-        ),
-        prompt_version=getattr(graph, "prompt_version", AGENT_PROMPT_VERSION),
-        usage_by_model={m: token_usage(raw) for m, raw in usage.usage_metadata.items()},
-        latency_seconds=round(latency, 2),
-    )
+    *_, last = stream_agent_analysis(graph, ticket_text, logs, settings)
+    return last["analysis"]

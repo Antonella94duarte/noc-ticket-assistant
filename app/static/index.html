@@ -3,17 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NOC Ticket Assistant</title>
+<title>NOC Agents</title>
 <style>
   :root {
     --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --border: #dde1e8;
-    --accent: #2459d6; --accent-text: #ffffff; --code-bg: #f0f2f6;
+    --accent: #2459d6; --accent-text: #ffffff; --accent-soft: #e6edfc; --code-bg: #f0f2f6;
+    --ok: #1f7a4d;
     --critical: #b42318; --major: #c4570c; --minor: #a37b00; --warning: #2f6f9f;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #12151b; --panel: #1b1f27; --text: #e6e9ef; --muted: #9aa3b2; --border: #2c323d;
-      --accent: #6d95ff; --accent-text: #0d1220; --code-bg: #232833;
+      --accent: #6d95ff; --accent-text: #0d1220; --accent-soft: #1f2a44; --code-bg: #232833;
+      --ok: #5ccf8f;
       --critical: #ff6b5e; --major: #ff9b52; --minor: #e7c34a; --warning: #6fb4e6;
     }
   }
@@ -39,6 +41,13 @@
   button { font: inherit; cursor: pointer; border-radius: 8px; }
   .chip { border: 1px solid var(--border); background: var(--bg); color: var(--text);
           padding: 3px 10px; font-size: 13px; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+  .mode { border: 1px solid var(--border); background: var(--bg); color: var(--text);
+          padding: 8px 10px; text-align: left; }
+  .mode strong { display: block; }
+  .mode span { color: var(--muted); font-size: 13px; }
+  .mode[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
   .primary { margin-top: 14px; width: 100%; padding: 10px; border: 0; background: var(--accent);
              color: var(--accent-text); font-weight: 600; }
   .primary:disabled { opacity: .6; cursor: progress; }
@@ -58,46 +67,100 @@
   .sev-minor { color: var(--minor); } .sev-warning { color: var(--warning); }
   .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
   .reason { margin: 10px 0 0; }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+  .final { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 10px 0 0; }
   dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
   ol, ul { margin: 0; padding-left: 20px; } li + li { margin-top: 6px; }
-  code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px;
-         font-family: ui-monospace, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+  code, pre { background: var(--code-bg); border-radius: 4px;
+              font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  code { padding: 1px 5px; overflow-wrap: anywhere; }
+  pre { padding: 8px 10px; margin: 6px 0 0; overflow-x: auto; max-height: 320px; }
   .likelihood { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); }
   .evidence, .expected { color: var(--muted); font-size: 14px; }
   .reply { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border);
            border-radius: 8px; padding: 12px; margin: 0; }
   .reply-head { display: flex; justify-content: space-between; align-items: center; }
+  /* Agent trace: one item per step, in the order the agent took them. */
+  .trace { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--border); }
+  .trace > li { position: relative; margin: 0; padding: 0 0 14px 10px; }
+  .trace > li::before { content: ""; position: absolute; left: -21px; top: 6px; width: 10px;
+                        height: 10px; border-radius: 50%; background: var(--panel);
+                        border: 2px solid var(--accent); }
+  .trace > li.tool::before { border-color: var(--muted); }
+  .trace > li.pending::before { border-style: dashed; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .t-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .t-title { font-weight: 600; overflow-wrap: anywhere; }
+  .t-time { color: var(--muted); font-size: 12px; white-space: nowrap;
+            font-variant-numeric: tabular-nums; }
+  .t-body { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .t-body .badges { margin: 4px 0; }
+  .findings { white-space: pre-wrap; color: var(--text); }
+  .findings.clamped { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+                      overflow: hidden; }
+  .link { border: 0; background: none; color: var(--accent); padding: 0; font-size: 13px; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  .arrow { color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;
+           margin: 0; }
+  .stats div { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+  .stats dt { font-size: 12px; } .stats dd { font-size: 18px; font-weight: 600; }
+  .runbooks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; align-items: center; }
+  .runbooks a { font-size: 13px; color: var(--ok); border: 1px solid currentColor;
+                border-radius: 999px; padding: 1px 9px; text-decoration: none; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <header>
-  <h1>NOC Ticket Assistant</h1>
-  <p>Paste a ticket and optional device logs: the API classifies it, diagnoses it and drafts the reply. All examples are synthetic.</p>
+  <h1>NOC Agents</h1>
+  <p>An agent that investigates network tickets the way an engineer would: it checks circuits, alarms, topology and runbooks before diagnosing. All data is synthetic.</p>
 </header>
 
 <main>
   <div>
     <section class="panel">
       <h2>Ticket</h2>
+      <div class="modes" id="modes">
+        <button class="mode" type="button" data-mode="agent" aria-pressed="true">
+          <strong>Agent</strong><span>Investigates the network, ~50 s</span>
+        </button>
+        <button class="mode" type="button" data-mode="pipeline" aria-pressed="false">
+          <strong>Pipeline</strong><span>Reads the ticket only, ~15 s</span>
+        </button>
+      </div>
       <div class="presets" id="presets"></div>
       <form id="form">
         <label for="ticket">Ticket text</label>
         <textarea id="ticket" rows="5" required minlength="10" maxlength="5000"></textarea>
         <label for="logs">Logs or alarms (optional)</label>
-        <textarea id="logs" class="logs" rows="6" maxlength="20000"></textarea>
+        <textarea id="logs" class="logs" rows="4" maxlength="20000"></textarea>
         <button class="primary" id="submit" type="submit">Analyze</button>
         <div class="status" id="status" role="status"></div>
       </form>
     </section>
     <section class="panel">
-      <h2>Recent tickets</h2>
+      <h2>Recorded agent runs</h2>
+      <div class="presets" id="demos"></div>
+      <p class="hint">Replays a real run of the agent (OpenAI <code>gpt-6-luna</code>), sped up. No API key needed.</p>
+    </section>
+    <section class="panel">
+      <h2>Recent pipeline analyses</h2>
       <ul class="recent" id="recent"></ul>
     </section>
   </div>
 
   <div id="result" hidden>
+    <section class="panel" id="trace-panel">
+      <h2>What the agent did</h2>
+      <ol class="trace" id="trace"></ol>
+    </section>
+    <section class="panel" id="summary-panel">
+      <h2>Run summary</h2>
+      <dl class="stats" id="stats"></dl>
+      <div class="runbooks" id="runbooks"></div>
+      <div class="meta" id="agent-meta"></div>
+    </section>
     <section class="panel">
       <h2>Classification</h2>
       <div class="badges">
@@ -105,16 +168,19 @@
         <span class="badge" id="category"></span>
       </div>
       <p class="reason" id="severity-reason"></p>
+      <div class="final" id="final" hidden>
+        <div class="badges">
+          <strong>Severity after investigating</strong>
+          <span class="badge" id="final-severity"></span>
+        </div>
+        <p class="reason" id="final-reason"></p>
+      </div>
       <dl id="entities"></dl>
       <div class="meta" id="meta"></div>
     </section>
     <section class="panel" id="missing-panel">
       <h2>Missing information</h2>
       <ul id="missing"></ul>
-    </section>
-    <section class="panel" id="diagnosis-panel">
-      <h2>Reasoning</h2>
-      <ol id="reasoning"></ol>
     </section>
     <section class="panel" id="causes-panel">
       <h2>Probable causes</h2>
@@ -136,31 +202,60 @@
       </div>
       <p class="reply" id="reply"></p>
     </section>
+    <section class="panel" id="diagnosis-panel">
+      <h2>Reasoning</h2>
+      <ol id="reasoning"></ol>
+    </section>
   </div>
 </main>
 
 <script>
-// Ticket text and model output are untrusted: they are only ever inserted with textContent.
+// Ticket text, tool results and model output are untrusted: only ever inserted with textContent.
+// The tickets match the incidents in the synthetic network (data/network/seed.json).
 const PRESETS = [
   {
-    label: "Interface errors",
-    ticket_text: "Cliente de SITE-ESTE-04 reporta cortes intermitentes y videollamadas que se congelan desde las 09:15 de hoy.",
-    logs: "sw-este-04 Gi1/0/12 is up, line protocol is up\n  5 minute input rate 412000 bits/sec\n  1873 input errors, 1650 CRC, 0 frame, 223 overrun\n  Last clearing of counters 02:10:44",
+    id: "customer-no-service",
+    label: "Customer without service",
+    ticket_text: "Hola, somos Distribuidora Del Sur. Desde esta mañana no tenemos internet en el depósito, necesitamos que lo revisen urgente.",
   },
   {
-    label: "Optic failure",
-    ticket_text: "Alarma en rtr-norte-02: la potencia de recepción del transceptor de Hu0/0/0/3 cayó por debajo del umbral. El tráfico sigue pasando por rtr-norte-01.",
-    logs: "rtr-norte-02 %PKT_INFRA-FM-3-FAULT_MAJOR: ALARM_MAJOR :RX LOS LANE-0 ALARM : Hu0/0/0/3\nrtr-norte-02 optics Hu0/0/0/3 Rx power: -28.4 dBm (low alarm threshold: -14.0 dBm)",
+    id: "slow-site",
+    label: "Slow site",
+    ticket_text: "Varios clientes de SITE-ESTE-04 reportan lentitud y videollamadas que se cortan desde el mediodía.",
   },
   {
-    label: "Vague outage",
-    ticket_text: "No anda nada en la oficina, necesitamos que lo solucionen urgente.",
-    logs: "",
+    id: "config-change",
+    label: "After a change",
+    ticket_text: "Banco Austral reporta que desde la madrugada no llega a sus servidores alojados en el datacenter desde la red de su oficina (VLAN 210).",
+  },
+  {
+    id: "power-alarm",
+    label: "Power alarm",
+    ticket_text: "Monitoreo: alarma de energía en SITE-SUR-02.",
+  },
+  {
+    id: "vague",
+    label: "Vague ticket",
+    ticket_text: "No anda nada, por favor llámennos.",
   },
 ];
+// Recorded runs in app/static/demo/<id>.ndjson (scripts/record_demo.py).
+const DEMOS = ["customer-no-service", "slow-site", "config-change"];
+const REPLAY_SPEED = 4;
+const REPO = "https://github.com/Antonella94duarte/noc-ticket-assistant/blob/main/data/runbooks/";
+const RUNBOOKS = {
+  "RB-001": "RB-001-link-down", "RB-002": "RB-002-optical-low-rx",
+  "RB-003": "RB-003-interface-errors", "RB-004": "RB-004-bundle-member-down",
+  "RB-005": "RB-005-ac-power-failure", "RB-006": "RB-006-psu-rectifier-failure",
+  "RB-007": "RB-007-config-change-rollback", "RB-008": "RB-008-customer-no-service",
+  "RB-009": "RB-009-high-utilization",
+};
 
 const $ = (id) => document.getElementById(id);
 const label = (value) => value.replaceAll("_", " ");
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+let mode = "agent";
+let run = 0;  // incremented by every new analysis, so an older one stops updating the page
 
 function el(tag, text, className) {
   const node = document.createElement(tag);
@@ -169,9 +264,19 @@ function el(tag, text, className) {
   return node;
 }
 
+// Models write **bold** and `code` in their text: render those two as elements, the rest as text.
+function rich(tag, text, className) {
+  const node = el(tag, null, className);
+  for (const part of (text ?? "").split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/)) {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) node.append(el("strong", part.slice(2, -2)));
+    else if (part.startsWith("`") && part.endsWith("`") && part.length > 2) node.append(el("code", part.slice(1, -1)));
+    else if (part) node.append(part);
+  }
+  return node;
+}
+
 function fillList(listId, items, render) {
-  const list = $(listId);
-  list.replaceChildren(...items.map(render));
+  $(listId).replaceChildren(...items.map(render));
   return items.length > 0;
 }
 
@@ -180,13 +285,23 @@ function setStatus(text, isError = false) {
   $("status").classList.toggle("error", isError);
 }
 
-function render(data) {
-  const c = data.classification;
-  $("severity").textContent = c.severity;
-  $("severity").className = `badge sev-${c.severity}`;
+function severityBadge(severity) {
+  return el("span", severity, `badge sev-${severity}`);
+}
+
+function setMode(next) {
+  mode = next;
+  for (const button of $("modes").querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.mode === next));
+  }
+}
+
+// --- Rendering shared by both modes -------------------------------------------------------
+
+function renderClassification(c) {
+  $("severity").replaceWith(Object.assign(severityBadge(c.severity), { id: "severity" }));
   $("category").textContent = label(c.category);
   $("severity-reason").textContent = c.severity_reason;
-
   const entities = [
     ["Sites", c.entities.sites], ["Devices", c.entities.devices],
     ["Interfaces", c.entities.interfaces], ["IP addresses", c.entities.ip_addresses],
@@ -195,40 +310,303 @@ function render(data) {
   $("entities").replaceChildren(...entities.flatMap(([name, values]) => [
     el("dt", name), el("dd", values.join(", ")),
   ]));
+  $("missing-panel").hidden = !fillList("missing", c.missing_information, (q) => el("li", q));
+}
 
+function renderDiagnosis(d) {
+  for (const id of ["diagnosis-panel", "causes-panel", "steps-panel", "actions-panel", "reply-panel"]) {
+    $(id).hidden = !d;
+  }
+  if (!d) return;
+  fillList("reasoning", d.reasoning, (step) => rich("li", step));
+  fillList("causes", d.probable_causes, (cause) => {
+    const li = el("li");
+    li.append(el("span", `${cause.likelihood} `, "likelihood"), rich("span", cause.cause),
+              rich("div", cause.evidence, "evidence"));
+    return li;
+  });
+  fillList("steps", d.diagnostic_steps, (step) => {
+    const li = el("li");
+    li.append(rich("div", step.action));
+    if (step.command) li.append(el("code", step.command));
+    li.append(rich("div", step.expected_result, "expected"));
+    return li;
+  });
+  fillList("actions", d.recommended_actions, (action) => rich("li", action));
+  // Null for internal alarms: nobody outside the NOC to reply to.
+  $("reply-panel").hidden = !d.customer_reply;
+  $("reply").textContent = d.customer_reply ?? "";
+  $("no-reply").hidden = Boolean(d.customer_reply);
+}
+
+function clearResult(forAgent) {
+  $("trace-panel").hidden = !forAgent;
+  $("summary-panel").hidden = true;
+  $("final").hidden = true;
+  $("meta").textContent = "";
+  $("trace").replaceChildren();
+  renderDiagnosis(null);
+  $("result").hidden = true;
+}
+
+// --- Pipeline mode: POST /api/v1/tickets/analyze ------------------------------------------
+
+function renderPipeline(data) {
+  clearResult(false);
+  renderClassification(data.classification);
+  renderDiagnosis(data.diagnosis);
   const u = data.usage;
   $("meta").textContent =
     `${data.model} · effort ${data.reasoning_effort ?? "default"} · ${data.prompt_version} · ` +
     `${u.total_tokens.toLocaleString()} tokens` + (data.cached ? " · served from cache" : "");
-
-  $("missing-panel").hidden = !fillList("missing", c.missing_information, (q) => el("li", q));
-
-  const d = data.diagnosis;
-  for (const id of ["diagnosis-panel", "causes-panel", "steps-panel", "actions-panel", "reply-panel"]) {
-    $(id).hidden = !d;
-  }
-  if (d) {
-    fillList("reasoning", d.reasoning, (step) => el("li", step));
-    fillList("causes", d.probable_causes, (cause) => {
-      const li = el("li");
-      li.append(el("span", `${cause.likelihood} `, "likelihood"), el("span", cause.cause),
-                el("div", cause.evidence, "evidence"));
-      return li;
-    });
-    fillList("steps", d.diagnostic_steps, (step) => {
-      const li = el("li");
-      li.append(el("div", step.action));
-      if (step.command) li.append(el("code", step.command));
-      li.append(el("div", step.expected_result, "expected"));
-      return li;
-    });
-    fillList("actions", d.recommended_actions, (action) => el("li", action));
-    // Null for internal alarms: nobody outside the NOC to reply to.
-    $("reply-panel").hidden = !d.customer_reply;
-    $("reply").textContent = d.customer_reply ?? "";
-    $("no-reply").hidden = Boolean(d.customer_reply);
-  }
   $("result").hidden = false;
+}
+
+async function analyzePipeline(body) {
+  setStatus("Classifying and diagnosing… this takes 10–20 seconds.");
+  const response = await fetch("/api/v1/tickets/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) return setStatus(errorText(response, data), true);
+  renderPipeline(data);
+  rememberTicket(data.id);
+  setStatus(data.cached ? "Identical ticket already analyzed: returned from the database." : "");
+  loadRecent();
+}
+
+function errorText(response, data) {
+  const detail = Array.isArray(data.detail) ? data.detail.map((e) => e.msg).join("; ") : data.detail;
+  return `Error ${response.status}: ${detail}`;
+}
+
+// --- Agent mode: the streamed trace of POST /api/v1/agent/analyze -------------------------
+
+function traceItem(title, elapsed, className = "") {
+  const li = el("li", null, className);
+  const head = el("div", null, "t-head");
+  head.append(el("span", title, "t-title"), el("span", elapsed != null ? `${elapsed.toFixed(1)} s` : "", "t-time"));
+  const body = el("div", null, "t-body");
+  li.append(head, body);
+  $("trace").append(li);
+  return { li, body };
+}
+
+function setPending(text) {
+  $("trace").querySelector(".pending")?.remove();
+  if (text) traceItem(text, null, "pending");
+}
+
+function formatArgs(args) {
+  return Object.entries(args).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(", ");
+}
+
+// One line saying what a tool found; the full result is one click away.
+function toolSummary(name, result) {
+  let data;
+  try { data = JSON.parse(result); } catch { return result.slice(0, 160); }
+  if (data.found === false) {
+    const suggestions = data.suggestions?.length ? `; did you mean ${data.suggestions.join(", ")}?` : "";
+    return `Not found${suggestions}`;
+  }
+  switch (name) {
+    case "get_active_alarms":
+      return `${data.total_active} active alarm(s)` +
+        (data.alarms.length ? `: ${[...new Set(data.alarms.map((a) => a.type))].join(", ")}` : "");
+    case "find_circuits":
+      return data.circuits.map((c) => `${c.circuit_id} (${c.customer})`).join(", ");
+    case "get_site":
+      return `${data.name}: ${data.role}`;
+    case "get_device":
+      return `${data.role} at ${data.site.code}`;
+    case "search_runbooks":
+      // A runbook's first section is its title, which already starts with its ID.
+      return data.sections
+        .map((s) => (s.section.startsWith(s.runbook) ? s.section : `${s.runbook} · ${s.section}`))
+        .join("; ");
+    default:
+      return `${result.length} characters`;
+  }
+}
+
+function prettyJson(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; }
+}
+
+function citedRunbooks(diagnosis) {
+  return [...new Set(JSON.stringify(diagnosis).match(/RB-\d{3}/g) ?? [])].sort();
+}
+
+function renderSummary(event) {
+  const a = event.analysis;
+  const tokens = Object.values(a.usage_by_model).reduce((sum, u) => sum + u.total_tokens, 0);
+  const cost = event.estimated_cost_usd;
+  const stats = [
+    ["Model calls", a.investigation_model_calls + 2],
+    ["Tool calls", a.tool_calls.length],
+    ["Tokens", tokens.toLocaleString()],
+    ["Latency", `${Math.round(a.latency_seconds)} s`],
+    ["Cost (upper bound)", cost == null ? "–" : `$${cost.toFixed(4)}`],
+  ];
+  $("stats").replaceChildren(...stats.map(([name, value]) => {
+    const div = el("div");
+    div.append(el("dt", name), el("dd", String(value)));
+    return div;
+  }));
+  const runbooks = citedRunbooks(a.diagnosis);
+  $("runbooks").replaceChildren(
+    el("span", runbooks.length ? "Runbooks cited:" : "No runbook cited.", "meta"),
+    ...runbooks.map((id) => {
+      const link = el("a", id);
+      if (RUNBOOKS[id]) link.href = `${REPO}${RUNBOOKS[id]}.md`;
+      link.target = "_blank";
+      link.rel = "noopener";
+      return link;
+    }),
+  );
+  $("agent-meta").textContent = a.limit_reached
+    ? "The investigation hit its tool or model call limit."
+    : `Prompts: ${a.prompt_version}`;
+  $("summary-panel").hidden = false;
+}
+
+// Applies one event of the stream; `tools` pairs each tool result with its call.
+function handleEvent(event, tools) {
+  switch (event.type) {
+    case "start":
+      $("meta").textContent = `${event.provider} · ${event.model}`;
+      setPending("Triage: classifying the ticket…");
+      break;
+    case "triage": {
+      setPending(null);
+      const c = event.classification;
+      const { body } = traceItem("Triage", event.elapsed);
+      const badges = el("div", null, "badges");
+      badges.append(severityBadge(c.severity), el("span", label(c.category)));
+      body.append(badges, el("div", c.severity_reason));
+      renderClassification(c);
+      $("result").hidden = false;
+      setPending("Investigating: querying the network…");
+      break;
+    }
+    case "tool_call": {
+      setPending(null);
+      const item = traceItem(`${event.name}(${formatArgs(event.args)})`, event.elapsed, "tool");
+      item.body.textContent = "running…";
+      tools.set(event.id, item);
+      setPending("Investigating…");
+      break;
+    }
+    case "tool_result": {
+      const item = tools.get(event.id) ?? traceItem(event.name, event.elapsed, "tool");
+      const details = el("details");
+      details.append(el("summary", "Result"), el("pre", prettyJson(event.result)));
+      item.body.replaceChildren(el("div", toolSummary(event.name, event.result)), details);
+      item.li.querySelector(".t-time").textContent = `${event.elapsed.toFixed(1)} s`;
+      break;
+    }
+    case "findings": {
+      setPending(null);
+      const { body } = traceItem("Findings", event.elapsed);
+      const findings = rich("div", event.text, "findings clamped");
+      const toggle = el("button", "Show all", "link");
+      toggle.type = "button";
+      toggle.addEventListener("click", () => {
+        toggle.textContent = findings.classList.toggle("clamped") ? "Show all" : "Show less";
+      });
+      body.append(findings, toggle);
+      setPending("Report: writing the diagnosis…");
+      break;
+    }
+    case "report": {
+      setPending(null);
+      const d = event.diagnosis;
+      const triage = $("severity").textContent;
+      const { body } = traceItem("Report", event.elapsed);
+      const badges = el("div", null, "badges");
+      badges.append(severityBadge(triage), el("span", "→", "arrow"), severityBadge(d.severity));
+      body.append(badges, el("div", d.severity_reason));
+      $("final-severity").replaceWith(Object.assign(severityBadge(d.severity), { id: "final-severity" }));
+      $("final-reason").textContent = d.severity_reason;
+      $("final").hidden = false;
+      renderDiagnosis(d);
+      break;
+    }
+    case "analysis":
+      renderSummary(event);
+      break;
+    case "error":
+      setPending(null);
+      setStatus(event.detail, true);
+      break;
+  }
+}
+
+async function analyzeAgent(body, current) {
+  clearResult(true);
+  setStatus("The agent is investigating… about a minute.");
+  const response = await fetch("/api/v1/agent/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) return setStatus(errorText(response, await response.json()), true);
+  history.replaceState(null, "", location.pathname);
+  // NDJSON: one event per line, applied as soon as it arrives.
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  const tools = new Map();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (current !== run) return reader.cancel();
+    buffer += value ?? "";
+    const lines = buffer.split("\n");
+    buffer = done ? "" : lines.pop();
+    for (const line of lines.filter(Boolean)) handleEvent(JSON.parse(line), tools);
+    if (done) break;
+  }
+  if (!$("status").classList.contains("error")) setStatus("");
+}
+
+async function replay(id) {
+  const current = ++run;
+  const preset = PRESETS.find((p) => p.id === id);
+  setMode("agent");
+  $("ticket").value = preset.ticket_text;
+  $("logs").value = "";
+  history.replaceState(null, "", `?demo=${encodeURIComponent(id)}`);
+  const response = await fetch(`/static/demo/${encodeURIComponent(id)}.ndjson`);
+  if (!response.ok) return setStatus(`Could not load the recorded run (${response.status}).`, true);
+  const events = (await response.text()).split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  clearResult(true);
+  setStatus(`Replaying a recorded run at ${REPLAY_SPEED}x speed.`);
+  const tools = new Map();
+  let previous = 0;
+  for (const event of events) {
+    await sleep(Math.min(2500, Math.max(250, ((event.elapsed - previous) * 1000) / REPLAY_SPEED)));
+    if (current !== run) return;
+    previous = event.elapsed;
+    handleEvent(event, tools);
+  }
+  setStatus("Replay of a recorded run. Press Analyze to run the agent live.");
+}
+
+// --- Page wiring ------------------------------------------------------------------------
+
+async function analyze(event) {
+  event.preventDefault();
+  const current = ++run;
+  const body = { ticket_text: $("ticket").value, logs: $("logs").value.trim() || null };
+  $("submit").disabled = true;
+  try {
+    await (mode === "agent" ? analyzeAgent(body, current) : analyzePipeline(body));
+  } catch {
+    setStatus("Could not reach the API.", true);
+  } finally {
+    $("submit").disabled = false;
+  }
 }
 
 async function loadRecent() {
@@ -242,8 +620,8 @@ async function loadRecent() {
     fillList("recent", page.items, (item) => {
       const button = el("button");
       button.type = "button";
-      const badge = el("span", item.severity, `sev-${item.severity}`);
-      button.append(badge, el("span", ` · ${label(item.category)}`),
+      button.append(el("span", item.severity, `sev-${item.severity}`),
+                    el("span", ` · ${label(item.category)}`),
                     el("span", item.ticket_excerpt, "excerpt"));
       button.addEventListener("click", () => openTicket(item.id));
       const li = el("li");
@@ -256,13 +634,15 @@ async function loadRecent() {
 }
 
 async function openTicket(id) {
+  run++;
   setStatus("Loading…");
   const response = await fetch(`/api/v1/tickets/${encodeURIComponent(id)}`);
   if (!response.ok) return setStatus(`Could not load the ticket (${response.status}).`, true);
   const data = await response.json();
+  setMode("pipeline");
   $("ticket").value = data.ticket_text;
   $("logs").value = data.logs ?? "";
-  render({ ...data, cached: true });
+  renderPipeline({ ...data, cached: true });
   rememberTicket(data.id);
   setStatus("");
 }
@@ -272,43 +652,22 @@ function rememberTicket(id) {
   history.replaceState(null, "", `?ticket=${encodeURIComponent(id)}`);
 }
 
-async function analyze(event) {
-  event.preventDefault();
-  const body = { ticket_text: $("ticket").value, logs: $("logs").value.trim() || null };
-  $("submit").disabled = true;
-  setStatus("Classifying and diagnosing… this takes 10–20 seconds.");
-  try {
-    const response = await fetch("/api/v1/tickets/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      const detail = Array.isArray(data.detail) ? data.detail.map((e) => e.msg).join("; ") : data.detail;
-      setStatus(`Error ${response.status}: ${detail}`, true);
-      return;
-    }
-    render(data);
-    rememberTicket(data.id);
-    setStatus(data.cached ? "Identical ticket already analyzed: returned from the database." : "");
-    loadRecent();
-  } catch {
-    setStatus("Could not reach the API.", true);
-  } finally {
-    $("submit").disabled = false;
-  }
+function chip(text, onClick) {
+  const button = el("button", text, "chip");
+  button.type = "button";
+  button.addEventListener("click", onClick);
+  return button;
 }
 
-$("presets").replaceChildren(...PRESETS.map((preset) => {
-  const button = el("button", preset.label, "chip");
-  button.type = "button";
-  button.addEventListener("click", () => {
-    $("ticket").value = preset.ticket_text;
-    $("logs").value = preset.logs;
-  });
-  return button;
-}));
+$("presets").replaceChildren(...PRESETS.map((preset) => chip(preset.label, () => {
+  $("ticket").value = preset.ticket_text;
+  $("logs").value = "";
+})));
+$("demos").replaceChildren(...DEMOS.map((id) => chip(PRESETS.find((p) => p.id === id).label, () => replay(id))));
+$("modes").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-mode]");
+  if (button) setMode(button.dataset.mode);
+});
 $("form").addEventListener("submit", analyze);
 $("copy").addEventListener("click", async () => {
   await navigator.clipboard.writeText($("reply").textContent);
@@ -316,8 +675,9 @@ $("copy").addEventListener("click", async () => {
   setTimeout(() => ($("copy").textContent = "Copy"), 1500);
 });
 loadRecent();
-const linkedTicket = new URLSearchParams(location.search).get("ticket");
-if (linkedTicket) openTicket(linkedTicket);
+const params = new URLSearchParams(location.search);
+if (params.get("ticket")) openTicket(params.get("ticket"));
+else if (DEMOS.includes(params.get("demo"))) replay(params.get("demo"));
 </script>
 </body>
 </html>
