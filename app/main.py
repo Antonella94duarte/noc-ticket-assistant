@@ -1,17 +1,20 @@
 import logging
+import mimetypes
 from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api.routes import api_router, health_router
+from app.api.routes import agent_router, api_router, health_router
 from app.config import get_settings
 from app.llm.client import LLMError, LLMNotConfiguredError
 
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
+mimetypes.add_type("application/x-ndjson", ".ndjson")
 
 
 def _register_error_handlers(app: FastAPI) -> None:
@@ -39,6 +42,9 @@ def create_app() -> FastAPI:
     _register_error_handlers(app)
     app.include_router(health_router)
     app.include_router(api_router)
+    app.include_router(agent_router)
+    # Recorded agent runs the demo page can replay without calling a model.
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/", include_in_schema=False)
     def demo_page() -> FileResponse:

@@ -41,4 +41,4 @@ def test_demo_page_is_served(client):
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "NOC Ticket Assistant" in response.text
+    assert "<title>NOC Agents</title>" in response.text
