@@ -378,7 +378,18 @@ Done so far:
   agent's main failure mode is blaming the loudest alarm nearby instead of the customer's own
   port.
 
-Next: a CrewAI version of the agent to compare frameworks, and the presentation.
+- **LangGraph vs CrewAI** (`app/crew/noc_crew.py`): the same agent rebuilt with CrewAI, with the
+  same prompts and tools, evaluated on the same 30 tickets. Quality is the same on OpenAI and
+  DeepSeek; CrewAI makes ~21 model calls per ticket instead of ~6 and costs about 3x more, and its
+  structured output didn't work with DeepSeek until the JSON was parsed by hand. LangGraph stays
+  as the base ([ADR 0005](docs/decisions/0005-langgraph-over-crewai.md)); full write-up in
+  [docs/framework-comparison.md](docs/framework-comparison.md). CrewAI lives in its own image:
+
+  ```bash
+  docker build --build-arg REQUIREMENTS=requirements-crewai.txt -t noc-ticket-assistant-crew .
+  ```
+
+Next: the presentation (README as a proof of concept, diagram, demo).
 
 ## Limitations and next steps
 

@@ -6,8 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /code
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# REQUIREMENTS=requirements-crewai.txt builds the image for the CrewAI comparison.
+ARG REQUIREMENTS=requirements.txt
+COPY requirements*.txt .
+RUN pip install -r ${REQUIREMENTS}
 
 COPY alembic.ini .
 COPY alembic ./alembic
