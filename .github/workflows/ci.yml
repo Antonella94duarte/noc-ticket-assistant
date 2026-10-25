@@ -55,3 +55,17 @@ jobs:
       - run: pip install -r requirements-dev.txt
       # The LLM is replaced by a fake in the tests: no API key and no cost.
       - run: pytest -ra
+
+  # The CrewAI version has its own, heavier dependencies (requirements-crewai.txt), so its tests
+  # run in a separate job instead of being skipped.
+  test-crewai:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-crewai.txt pytest
+      - run: pytest -ra tests/test_crew.py

@@ -1,0 +1,5 @@
+# Optional: the CrewAI version of the agent (app/crew), for the framework comparison.
+# Kept out of the API image because it adds ~200 packages (chromadb, lancedb, onnxruntime...)
+# and needs openai<3, while the API image resolves openai 3.x.
+-r requirements.txt
+crewai[openai,litellm]==1.15.30

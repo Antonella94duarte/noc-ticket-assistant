@@ -9,6 +9,7 @@ It calls the real models: run it by hand, not in CI.
 
     python scripts/evaluate_agents.py --providers openai deepseek
     python scripts/evaluate_agents.py --providers ollama --systems baseline agent-runbooks --limit 8
+    python scripts/evaluate_agents.py --systems crew   # in the CrewAI image
     python scripts/evaluate_agents.py --summarize data/eval/results/agents-<timestamp>.jsonl
 
 Fallback providers are disabled so each provider is measured on its own.
@@ -45,7 +46,9 @@ from app.llm.providers import create_chat_models  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "data" / "eval" / "agent_cases.jsonl"
 RESULTS_DIR = ROOT / "data" / "eval" / "results"
-SYSTEMS = ("baseline", "agent", "agent-runbooks")
+SYSTEMS = ("baseline", "agent", "agent-runbooks", "crew")
+# Systems that can search the runbooks, so citing one is scored.
+WITH_RUNBOOKS = {"agent-runbooks", "crew"}
 METRICS = ("category_ok", "severity_ok", "root_cause_ok", "runbook_ok", "reply_ok")
 
 
@@ -83,6 +86,21 @@ def build_runner(system: str, settings: Settings):
 
         return run
 
+    if system == "crew":
+        # Only installed in the CrewAI image (requirements-crewai.txt).
+        from app.crew.noc_crew import run_crew_analysis
+
+        def run(case: AgentCase) -> dict:
+            result = run_crew_analysis(case.ticket_text, case.logs, settings)
+            return {
+                **result,
+                "final_severity": result["diagnosis"].severity.value,
+                "tool_calls": [c.name for c in result["tool_calls"]],
+                "limit_reached": False,  # CrewAI doesn't report it
+            }
+
+        return run
+
     graph = build_default_graph(settings, with_runbooks=system == "agent-runbooks")
 
     def run(case: AgentCase) -> dict:
@@ -108,7 +126,7 @@ def failed_scores(case: AgentCase, system: str) -> dict:
         "category_ok": False,
         "severity_ok": False,
         "root_cause_ok": False if case.evidence_any else None,
-        "runbook_ok": False if case.runbooks and system == "agent-runbooks" else None,
+        "runbook_ok": False if case.runbooks and system in WITH_RUNBOOKS else None,
         "reply_ok": False if case.expects_customer_reply is not None else None,
         "questions_ok": False if case.expects_questions is not None else None,
     }
@@ -137,7 +155,7 @@ def evaluate_one(run, case: AgentCase, system: str, settings: Settings) -> dict:
         out["classification"],
         out["diagnosis"],
         out["final_severity"],
-        can_search_runbooks=system == "agent-runbooks",
+        can_search_runbooks=system in WITH_RUNBOOKS,
     )
     input_tokens = sum(u.input_tokens for u in out["usage_by_model"].values())
     output_tokens = sum(u.output_tokens for u in out["usage_by_model"].values())
@@ -207,7 +225,13 @@ def summarize(rows: list[dict]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--providers", nargs="+", choices=PROVIDERS, default=["openai"])
-    parser.add_argument("--systems", nargs="+", choices=SYSTEMS, default=list(SYSTEMS))
+    parser.add_argument(
+        "--systems",
+        nargs="+",
+        choices=SYSTEMS,
+        default=list(SYSTEMS[:3]),
+        help="crew needs the CrewAI image (requirements-crewai.txt)",
+    )
     parser.add_argument("--cases", nargs="+", help="Only these case ids")
     parser.add_argument("--limit", type=int, help="Only the first N cases")
     parser.add_argument("--workers", type=int, default=4, help="Parallel runs (Ollama uses 1)")
