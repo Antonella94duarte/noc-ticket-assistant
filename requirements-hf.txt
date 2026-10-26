@@ -1,0 +1,12 @@
+# Optional: small local Hugging Face models (app/small_models, RUNBOOK_RETRIEVER=hf), for the
+# small-models comparison. Kept out of the API image; build its own with
+#   docker build --build-arg REQUIREMENTS=requirements-hf.txt -t noc-ticket-assistant-hf .
+# torch comes from PyTorch's CPU index: the default build pulls ~2.5 GB of CUDA libraries, and
+# models of this size run fine on a CPU. Models download on first use (~1-2 GB for the comparison).
+--extra-index-url https://download.pytorch.org/whl/cpu
+-r requirements.txt
+torch==2.14.1+cpu
+huggingface_hub>=1.0,<3.0
+transformers>=4.50,<7.0
+sentence-transformers>=3.0,<7.0
+llama-index-embeddings-huggingface>=0.6,<0.9
